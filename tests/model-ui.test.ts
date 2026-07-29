@@ -1,32 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { populateModelSelect, renderModelPricingTable } from '@/entrypoints/popup/model-ui';
+import { populateModelSelect, renderModelInfoTable } from '@/entrypoints/popup/model-ui';
 
-describe('popup model UI', () => {
+describe('popup local model UI', () => {
   beforeEach(() => {
-    document.body.innerHTML = '<select id="models"></select><div id="pricing"></div>';
+    document.body.innerHTML = '<select id="models"></select><div id="info"></div>';
   });
-
-  it('renders exactly the catalog model labels in the selector', () => {
+  it('renders exactly the six local model choices', () => {
     const select = document.getElementById('models') as HTMLSelectElement;
     populateModelSelect(select);
-
-    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
-      'Gemini 3.1 Flash Lite',
-      'GPT-5.4 Nano',
-      'GPT-5.6 Luna',
-      'Claude Haiku 4.5',
-      'Upstage Solar Mini',
-    ]);
+    expect(select.options).toHaveLength(6);
+    expect(select.textContent).toContain('TranslateGemma 12B');
   });
-
-  it('renders model labels and prices without a description column', () => {
-    const tooltip = document.getElementById('pricing') as HTMLElement;
-    renderModelPricingTable(tooltip);
-
-    expect(tooltip.textContent).toContain('GPT-5.6 Luna');
-    expect(tooltip.textContent).toContain('Input / Output · USD per 1M tokens');
-    expect(tooltip.textContent).not.toContain('저비용');
-    expect(tooltip.textContent).not.toContain('고품질');
-    expect(tooltip.querySelectorAll('th')).toHaveLength(2);
+  it('renders model family information without cloud pricing', () => {
+    const info = document.getElementById('info') as HTMLElement;
+    renderModelInfoTable(info);
+    expect(info.textContent).toContain('Hy-MT2');
+    expect(info.textContent).not.toContain('$');
   });
 });

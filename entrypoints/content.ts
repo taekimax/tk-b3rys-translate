@@ -21,20 +21,9 @@ import {
 } from './content/context-invalidated';
 import type { TranslationMode } from '@/types';
 import type { ContentMessage } from '@/utils/messaging';
-import { SKIP_HOSTS, USAGE_RATIO_KEY, BUILD_TAG } from '@/utils/constants';
+import { SKIP_HOSTS, BUILD_TAG } from '@/utils/constants';
 import { TranslationStateMachine } from '@/utils/translation-state';
 import { dbg } from '@/utils/debug';
-
-/** Does the currently-selected engine have an API key saved? (no side effects) */
-async function hasApiKeyStored(): Promise<boolean> {
-  const { selectedEngine } = await chrome.storage.local.get<{ selectedEngine?: string }>(
-    'selectedEngine',
-  );
-  const { engineApiKeys } = await chrome.storage.local.get<{
-    engineApiKeys?: Record<string, string>;
-  }>('engineApiKeys');
-  return !!engineApiKeys?.[selectedEngine || 'gemini'];
-}
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -75,13 +64,9 @@ export default defineContentScript({
       setTranslationMode,
       checkApiKey: async () => {
         try {
-          const hasKey = await hasApiKeyStored();
-          if (!hasKey) {
-            // First-run onboarding: the popup we're about to open should
-            // explain WHY it opened and point at the key-issuance link.
-            await chrome.storage.local.set({ onboardingNotice: true });
-          }
-          return hasKey;
+          // Host availability is checked by the native-messaging request. Do
+          // not preflight through an HTTP endpoint or store any credentials.
+          return true;
         } catch (err) {
           if (isContextInvalidated(err)) {
             markContextInvalidated();
@@ -158,25 +143,9 @@ export default defineContentScript({
       chrome.storage.local.set({ translationMode: mode }).catch(() => {});
     });
 
-    // Load initial usage gauge (usage/cost lives in storage.local — see
-    // usage-storage note: sync's write quota can't take per-batch writes)
-    chrome.storage.local
-      .get(USAGE_RATIO_KEY)
-      .then((data) => {
-        const ratio = data[USAGE_RATIO_KEY] as number | undefined;
-        if (ratio !== undefined) fab.setUsageGauge(ratio);
-      })
-      .catch(() => {});
-
-    // Listen for storage changes from other tabs. All settings + usage live in
-    // storage.local now (sync's write quota can't take our write volume — see
-    // usage-storage note), so only the `local` area matters.
+    // Listen for settings changes from other tabs.
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
-
-      if (changes[USAGE_RATIO_KEY]) {
-        fab.setUsageGauge(changes[USAGE_RATIO_KEY].newValue as number);
-      }
 
       // Propagate translation mode across tabs (live, no refresh needed)
       if (changes.translationMode) {
@@ -224,17 +193,15 @@ export default defineContentScript({
     });
 
     // --- Auto-translate: opt-in "FAB state follows me across pages" ---
-    // Off by default (has API cost). When on, the FAB's last on/off intent
+    // Off by default. When on, the FAB's last on/off intent
     // (persisted as `translationEnabled` by the state machine) carries over to
     // every navigation: FAB ON → each new page auto-translates; FAB OFF → pages
     // stay untranslated until the user turns the FAB on again. Without auto
-    // mode every page starts OFF regardless. Silently skips when no API key is
-    // set — never nags the popup open on every page load.
+    // mode every page starts OFF regardless.
     let autoTranslate = false;
 
     async function autoTranslateCurrentPage(): Promise<void> {
       if (!autoTranslate || isMarkedInvalidated()) return;
-      if (!(await hasApiKeyStored())) return; // no key → stay quiet
       const { translationEnabled } = await chrome.storage.local.get<{
         translationEnabled?: boolean;
       }>('translationEnabled');

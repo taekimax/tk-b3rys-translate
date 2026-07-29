@@ -27,7 +27,7 @@
 
 - **Framework**: WXT (Web Extension Framework) + Manifest V3
 - **Language**: TypeScript (vanilla, no React/Vue)
-- **Translation API**: 다중 엔진 (Gemini, OpenAI, Anthropic)
+- **Translation runtime**: local MLX native host only (six fixed Q4 models; no cloud API)
 - **Build**: WXT (Vite 기반)
 - **Test**: Vitest + happy-dom
 
@@ -36,9 +36,9 @@
 ```
 Content Script (DOM 조작, floating button, 번역 주입)
     ↕ chrome.runtime.sendMessage
-Background Service Worker (Gemini API 호출, 배치 처리, 재시도, LRU 캐시)
-    ↕ fetch
-Gemini API (https://generativelanguage.googleapis.com/v1beta/)
+Background Service Worker (native request queue, 배치 처리, LRU 캐시)
+    ↕ chrome.runtime.connectNative
+macOS local MLX host (one resident model)
 ```
 
 ## Branding
@@ -51,7 +51,7 @@ Gemini API (https://generativelanguage.googleapis.com/v1beta/)
 
 ```
 entrypoints/
-  background.ts              # Service worker: API 통신, 캐시
+  background.ts              # Service worker: native queue, cache
   content.ts                 # Content script 메인 진입점
   content/
     floating-button.ts       # 플로팅 번역 버튼 (Shadow DOM)
@@ -62,10 +62,11 @@ entrypoints/
     youtube/                 # YouTube 자막 번역
   popup/                     # 팝업 설정 페이지
 utils/
-  engines/                   # 번역 엔진 (gemini, openai, anthropic, google-translate)
+  engines/                   # local MLX native-messaging engine
   messaging.ts               # Content ↔ Background 메시지 타입
-  constants.ts               # 상수 (엔드포인트, 배치 사이즈 등)
+  constants.ts               # translation and UI constants
   translation-cache.ts       # LRU 번역 캐시
+native-host/                 # Swift MLX Chrome native host + installer template
 ```
 
 ## Commands

@@ -365,12 +365,8 @@ async function translateSelection(text: string, wordMode: boolean): Promise<void
     // Popup may have been closed while waiting
     if (!popupEl) return;
 
-    if (response.apiKeyError) {
-      setPopupError('API 키가 설정되지 않았습니다. 팝업에서 설정해주세요.');
-      return;
-    }
-    if (response.costLimitExceeded) {
-      setPopupError('사용량 한도에 도달했습니다.');
+    if (response.localHostError) {
+      setPopupError('로컬 MLX 호스트를 확인해주세요.');
       return;
     }
     if (response.error) {

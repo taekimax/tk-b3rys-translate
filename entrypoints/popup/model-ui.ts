@@ -10,33 +10,18 @@ export function populateModelSelect(select: HTMLSelectElement): void {
   }
 }
 
-export function renderModelPricingTable(container: HTMLElement): void {
-  const title = document.createElement('div');
-  title.className = 'info-tooltip-title';
-  title.textContent = '모델 가격 · Input / Output · USD per 1M tokens';
-
+export function renderModelInfoTable(container: HTMLElement): void {
   const table = document.createElement('table');
-  const head = document.createElement('thead');
-  const headRow = document.createElement('tr');
-  for (const label of ['모델', '가격']) {
-    const th = document.createElement('th');
-    th.textContent = label;
-    headRow.appendChild(th);
-  }
-  head.appendChild(headRow);
-
   const body = document.createElement('tbody');
   for (const model of MODEL_CATALOG) {
     const row = document.createElement('tr');
     const name = document.createElement('td');
     name.textContent = model.label;
-    const price = document.createElement('td');
-    price.className = 'tt-price';
-    price.textContent = `$${model.pricing.input.toFixed(2)}/${model.pricing.output.toFixed(2)}`;
-    row.append(name, price);
+    const family = document.createElement('td');
+    family.textContent = model.family;
+    row.append(name, family);
     body.appendChild(row);
   }
-
-  table.append(head, body);
-  container.replaceChildren(title, table);
+  table.appendChild(body);
+  container.replaceChildren(table);
 }

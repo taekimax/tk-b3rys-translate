@@ -7,7 +7,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: ['dist/', '.output/', '.wxt/', 'node_modules/'],
+    ignores: ['dist/', '.output/', '.wxt/', 'node_modules/', 'native-host/.build/'],
   },
   {
     rules: {

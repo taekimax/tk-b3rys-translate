@@ -37,8 +37,8 @@ YouTube 이중자막(원문 + 번역)도 지원합니다.
 - **10개 언어 지원** — 타겟 언어 선택, 소스 자동 감지, 언어별 캐시 분리
 - **YouTube 이중자막** — 원문 + 번역 오버레이, rolling 번역, 표시 모드 순환
 - **단어/문장 선택 번역** — 드래그 팝업, 단어 모드는 예문 2개 + 발음 듣기
-- **다중 모델** — Gemini / OpenAI / Anthropic 모델 선택, 제공사별 키 독립 저장
-- **비용 추적** — 누적 비용·토큰 사용량 표시, 한도 설정, 플로팅 버튼 배터리 게이지
+- **로컬 MLX 모델** — Gemma 4 E4B/12B, TranslateGemma 4B/12B, Hy-MT2 1.8B/7B Q4만 지원
+- **완전 로컬 추론** — API 키, 제공사 계정, 원격 LLM 엔드포인트 없음
 - **동적 콘텐츠 대응** — MutationObserver로 무한 스크롤·SPA 자동 번역
 - **LRU 캐시** — 번역 결과 캐싱 (TTL 7일, 최대 4,000개)
 
@@ -122,22 +122,17 @@ npm run build
 
 > ⚠️ 로드한 `dist/chrome-mv3` 폴더를 **지우거나 옮기면 확장이 깨집니다** — 그대로 두세요. 코드 업데이트 후에는 `chrome://extensions`에서 이 확장의 **새로고침(↻)** 버튼을 누르면 반영됩니다.
 
-**4. API 키 설정**
+**4. 로컬 MLX 호스트 설치**
 
-Chrome 툴바에서 확장 프로그램 아이콘 클릭 → 팝업에서 모델 선택 및 API 키 입력.
-(Model 라벨 옆 **ⓘ**에 마우스를 올리면 모델별 입력/출력 가격이 표시됩니다.)
+모델은 저장소의 `.local-models/`에 별도로 보관됩니다(커밋되지 않음). 다음으로 네이티브 호스트를 빌드하고, `chrome://extensions`에 표시되는 이 확장의 ID를 사용해 등록합니다.
 
-<img src="docs/popup-settings.jpeg" width="300">
+```bash
+cd native-host
+swift build -c release -j 4
+./install-host.sh <chrome-extension-id>
+```
 
-| 모델                      | 키 발급 위치                                                     | 가격 (USD / 1M tokens, input/output) |
-| ------------------------- | ---------------------------------------------------------------- | ------------------------------------ |
-| **Gemini 3.1 Flash Lite** | [Google AI Studio](https://aistudio.google.com/apikey)           | $0.25 / $1.50                        |
-| **GPT-5.4 Nano**          | [OpenAI Platform](https://platform.openai.com/api-keys)          | $0.20 / $1.25                        |
-| **GPT-5.6 Luna**          | [OpenAI Platform](https://platform.openai.com/api-keys)          | $1.00 / $6.00                        |
-| **Claude Haiku 4.5**      | [Anthropic Console](https://console.anthropic.com/settings/keys) | $1.00 / $5.00                        |
-
-API 키는 제공사별로 독립 저장되므로 같은 제공사의 모델은 하나의 키를 공유합니다.
-API 키는 브라우저의 `chrome.storage.local`에만 저장되며 외부로 동기화되지 않습니다 (번역 요청은 사용자가 선택한 제공사 API로 직접 전송).
+Chrome 툴바에서 확장 프로그램 아이콘을 열어 여섯 모델 중 하나를 고릅니다. API 키나 클라우드 설정은 없습니다.
 
 ---
 
@@ -151,7 +146,7 @@ API 키는 브라우저의 `chrome.storage.local`에만 저장되며 외부로 �
 - 번역 중 무한 스크롤·동적 로딩으로 새로 나타나는 콘텐츠도 이어서 번역됩니다
 - 버튼을 다시 클릭하면 번역 제거 (OFF)
 - 다른 페이지로 이동하면 번역은 꺼지므로, 새 페이지에서 버튼을 다시 눌러 시작합니다
-- **자동 번역**: 팝업에서 `Auto-translate`를 켜면 방문하는 모든 페이지가 자동으로 번역됩니다 (기본 OFF, API 비용 증가 주의)
+- **자동 번역**: 팝업에서 `Auto-translate`를 켜면 방문하는 모든 페이지가 자동으로 번역됩니다 (기본 OFF)
 
 ### 선택 번역
 
@@ -167,13 +162,10 @@ API 키는 브라우저의 `chrome.storage.local`에만 저장되며 외부로 �
 - 다시 클릭하면 해제
 - 원문 자막이 타겟 언어와 같으면 번역 없이 원문만 표시합니다
 
-### 비용 추적
+### 로컬 모델
 
-- 팝업 하단 **COST**에서 누적 비용 확인
-- 상세보기(▼) 클릭 시 모델별 토큰 사용량 + 예상 비용 표시
-- **Limit**은 누적 예상 비용이 도달한 뒤 후속 요청을 차단하는 기준입니다. 제공사 실제 청구액의 hard cap이 아니며 진행 중 요청으로 초과할 수 있습니다
-- 플로팅 버튼에 배터리 게이지로 한도 대비 사용량 시각화 (초록→노랑→빨강)
-- 초기화(↻) 버튼으로 사용량 리셋
+- 지원 모델은 Gemma 4 E4B/12B, TranslateGemma 4B/12B, Hy-MT2 1.8B/7B의 Q4 MLX 파일 여섯 개뿐입니다
+- 번역은 Chrome native messaging으로 macOS MLX 호스트에만 전달되며, 네트워크 LLM 요청·API 키·사용량/비용 계산은 없습니다
 
 ---
 

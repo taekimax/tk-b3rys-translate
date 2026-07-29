@@ -846,14 +846,14 @@ async function processBatch(batch: TextBlock[], gen: number): Promise<void> {
     }
 
     if (response.error) {
-      if (response.apiKeyError || response.costLimitExceeded) {
+      if (response.localHostError) {
         withScrollCompensation(
           scroller,
           () => loaders.forEach((loader) => loader.remove()),
           batchEls,
         );
         translateGen++; // Cancel all in-flight batches
-        await chrome.storage.local.set({ apiKeyErrorMessage: response.error });
+        await chrome.storage.local.set({ localHostErrorMessage: response.error });
         chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch(() => {});
         return;
       }

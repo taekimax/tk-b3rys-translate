@@ -341,12 +341,12 @@ async function handleButtonClick(): Promise<void> {
 
     // Semantic refinement: only for ASR subtitles (manual subs already have punctuation)
     if (!isManual) {
-      const { ytAiSubtitleEnabled, selectedEngine } = await chrome.storage.local.get<{
+      const { ytAiSubtitleEnabled, selectedModel } = await chrome.storage.local.get<{
         ytAiSubtitleEnabled?: boolean;
-        selectedEngine?: string;
-      }>(['ytAiSubtitleEnabled', 'selectedEngine']);
+        selectedModel?: string;
+      }>(['ytAiSubtitleEnabled', 'selectedModel']);
       console.log(
-        `[b3rys] AI subtitle check: enabled=${ytAiSubtitleEnabled}, engine=${selectedEngine}`,
+        `[b3rys] AI subtitle check: enabled=${ytAiSubtitleEnabled}, model=${selectedModel}`,
       );
       if (ytAiSubtitleEnabled !== false) {
         semanticMergeCues(cues, signal)

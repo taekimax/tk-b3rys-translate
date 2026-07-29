@@ -12,9 +12,7 @@ export interface TranslateBatchRequest {
 export interface TranslateBatchResponse {
   translations: { id: string; translatedText: string }[];
   error?: string;
-  apiKeyError?: boolean;
-  costLimitExceeded?: boolean;
-  totalCost?: number;
+  localHostError?: boolean;
 }
 
 export interface ToggleTranslationMessage {

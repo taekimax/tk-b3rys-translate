@@ -1,135 +1,19 @@
 # 개인정보 처리방침 / Privacy Policy
 
-**최종 수정일 / Last Updated:** 2026-07-17
-
----
+**최종 수정일 / Last Updated:** 2026-07-30
 
 ## 한국어
 
-### 개요
+b3rys translate는 웹페이지와 YouTube 자막을 사용자가 고른 언어로 번역합니다. 이 포크는 로컬 MLX 모델만 사용합니다. 번역 텍스트, API 키, 계정 정보, 사용량 정보는 어떤 클라우드 LLM 제공자나 개발자 서버에도 전송하지 않습니다.
 
-b3rys translate(이하 "본 확장 프로그램")은 웹페이지와 YouTube 자막을 사용자가 선택한 언어로 번역하는 Chrome 확장 프로그램입니다. 본 확장 프로그램은 사용자의 개인정보를 수집, 저장 또는 전송하지 않습니다.
+로컬에 저장되는 데이터는 모델 선택과 버튼 설정, 그리고 7일 후 만료되는 번역 캐시(최대 4,000개)입니다. 모델 가중치는 사용자가 별도 내려받아 `.local-models/`에 보관하며 Git에 포함되지 않습니다. `storage`, `activeTab`, `nativeMessaging`, 페이지 접근 권한은 설정·캐시 저장, 현재 페이지의 텍스트 읽기, 그리고 macOS의 로컬 호스트와 통신하는 데만 사용됩니다.
 
-### 수집하지 않는 정보
-
-본 확장 프로그램은 다음 정보를 **수집하지 않습니다**:
-
-- 개인 식별 정보 (이름, 이메일, 계정 정보 등)
-- 브라우징 히스토리 또는 방문 기록
-- 분석, 추적, 텔레메트리 데이터
-- 쿠키 또는 브라우저 핑거프린트
-
-본 확장 프로그램은 자체 서버를 운영하지 않으며, 개발자에게 어떠한 데이터도 전송되지 않습니다.
-
-### 로컬에만 저장되는 데이터
-
-다음 데이터는 사용자의 브라우저에만 저장되며 외부로 전송되지 않습니다:
-
-| 데이터      | 저장 위치              | 설명                                                                   |
-| ----------- | ---------------------- | ---------------------------------------------------------------------- |
-| API 키      | `chrome.storage.local` | 사용자가 직접 입력한 번역 API 키. 기기 외부로 동기화되지 않음          |
-| 설정        | `chrome.storage.local` | 모델/제공사 선택, 버튼 표시 여부 등 기본 설정. 기기 간 동기화되지 않음 |
-| 번역 캐시   | `chrome.storage.local` | 번역 결과 캐시 (LRU 방식, 7일 후 자동 만료, 최대 4,000개)              |
-| 사용량 통계 | `chrome.storage.local` | 토큰 사용량 및 예상 비용 (로컬 계산, 외부 전송·기기 간 동기화 없음)    |
-
-### 외부로 전송되는 데이터
-
-번역 기능을 위해 다음 데이터가 사용자가 선택한 번역 API에 전송됩니다:
-
-| 데이터                           | 전송 대상       | 목적      |
-| -------------------------------- | --------------- | --------- |
-| 웹페이지 텍스트 (번역 대상 문단) | 선택한 번역 API | 번역      |
-| YouTube 자막 텍스트              | 선택한 번역 API | 자막 번역 |
-| API 키                           | 해당 API 제공자 | 인증      |
-
-지원하는 번역 API:
-
-- **Google Gemini** — `generativelanguage.googleapis.com`
-- **OpenAI** — `api.openai.com`
-- **Anthropic** — `api.anthropic.com`
-
-각 API 제공자의 데이터 처리에 대해서는 해당 서비스의 개인정보 처리방침을 참조하시기 바랍니다.
-
-### 권한 사용 목적
-
-| 권한               | 목적                                  |
-| ------------------ | ------------------------------------- |
-| `activeTab`        | 현재 탭의 웹페이지 텍스트를 읽어 번역 |
-| `storage`          | API 키, 설정, 번역 캐시를 로컬에 저장 |
-| `host_permissions` | 번역 API 엔드포인트와 통신            |
-
-### 데이터 삭제
-
-모든 저장 데이터는 확장 프로그램을 제거하면 자동으로 삭제됩니다. 제거 전에 데이터를 삭제하려면 Chrome 설정 → 확장 프로그램 → b3rys translate → 저장 데이터 삭제를 사용하시기 바랍니다.
-
-### 문의
-
-개인정보 관련 문의사항이 있으시면 아래 GitHub Issues를 통해 연락해 주시기 바랍니다.
-
-- https://github.com/b3rys/b3rys-translate/issues
-
----
+확장을 제거하면 Chrome 저장 데이터가 삭제됩니다. 모델 파일은 사용자가 별도로 관리합니다.
 
 ## English
 
-### Overview
+b3rys translate translates web pages and YouTube subtitles using local MLX models only. This fork sends no translation text, API keys, account data, or usage data to a cloud LLM provider or developer-operated server.
 
-b3rys translate ("the Extension") is a Chrome extension that translates web pages and YouTube subtitles into the language you choose. The Extension does not collect, store, or transmit any personal information.
+The extension stores only the selected model, button settings, and a translation cache (up to 4,000 entries, expiring after seven days). Model weights are separately downloaded into `.local-models/` and are never committed. `storage`, `activeTab`, `nativeMessaging`, and page access are used solely for settings/cache, reading the current page, and communicating with the local macOS host.
 
-### Information We Do NOT Collect
-
-The Extension does **not** collect:
-
-- Personal identifiable information (name, email, account info, etc.)
-- Browsing history or visited URLs
-- Analytics, tracking, or telemetry data
-- Cookies or browser fingerprints
-
-The Extension does not operate any servers. No data is ever sent to the developer.
-
-### Data Stored Locally Only
-
-The following data is stored exclusively in the user's browser and is never transmitted externally:
-
-| Data              | Storage                | Description                                                                                   |
-| ----------------- | ---------------------- | --------------------------------------------------------------------------------------------- |
-| API Keys          | `chrome.storage.local` | Translation API keys entered by the user. Not synced outside the device                       |
-| Settings          | `chrome.storage.local` | Model/provider selection, button visibility, and other preferences. Not synced across devices |
-| Translation Cache | `chrome.storage.local` | Cached translation results (LRU, expires after 7 days, max 4,000 entries)                     |
-| Usage Statistics  | `chrome.storage.local` | Token usage and estimated cost (computed locally, never transmitted or synced across devices) |
-
-### Data Transmitted Externally
-
-To provide translation functionality, the following data is sent to the translation API selected by the user:
-
-| Data                                    | Destination              | Purpose              |
-| --------------------------------------- | ------------------------ | -------------------- |
-| Web page text (paragraphs to translate) | Selected translation API | Translation          |
-| YouTube subtitle text                   | Selected translation API | Subtitle translation |
-| API Key                                 | Respective API provider  | Authentication       |
-
-Supported translation APIs:
-
-- **Google Gemini** — `generativelanguage.googleapis.com`
-- **OpenAI** — `api.openai.com`
-- **Anthropic** — `api.anthropic.com`
-
-Please refer to each API provider's privacy policy for details on how they handle data.
-
-### Permission Usage
-
-| Permission         | Purpose                                                 |
-| ------------------ | ------------------------------------------------------- |
-| `activeTab`        | Read web page text on the current tab for translation   |
-| `storage`          | Store API keys, settings, and translation cache locally |
-| `host_permissions` | Communicate with translation API endpoints              |
-
-### Data Deletion
-
-All stored data is automatically deleted when the Extension is uninstalled. To delete data before uninstalling, go to Chrome Settings → Extensions → b3rys translate → Clear storage data.
-
-### Contact
-
-For privacy-related inquiries, please reach out via GitHub Issues:
-
-- https://github.com/b3rys/b3rys-translate/issues
+Uninstalling removes Chrome storage. Model files remain under the user's control.

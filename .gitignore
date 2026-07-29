@@ -22,6 +22,7 @@ __pycache__
 dist
 .output
 .wxt
+native-host/.build
 
 # Packaged extension
 *.zip
