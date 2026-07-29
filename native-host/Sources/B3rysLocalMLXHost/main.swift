@@ -18,12 +18,12 @@ private enum LocalModel: String, Codable, CaseIterable {
 
   var directory: String {
     switch self {
-    case .gemma4E4B: "gemma-4-e4b-it-4bit"
-    case .gemma4_12B: "gemma-4-12B-it-4bit"
-    case .translateGemma4B: "translategemma-4b-it-4bit"
-    case .translateGemma12B: "translategemma-12b-it-4bit"
-    case .hy18B: "Hy-MT2-1.8B-4bit"
-    case .hy7B: "Hy-MT2-7B-4bit"
+    case .gemma4E4B: "gemma4-e4b-q4/475b9088d29754a3379866cf5aeb6b41acd313c2"
+    case .gemma4_12B: "gemma4-12b-q4/73bcf09092aa277861d5a191b989b666f7f32e8f"
+    case .translateGemma4B: "translategemma-4b-it-q4/5788ec08c047f3f2e17808101b8d9566ac930d58"
+    case .translateGemma12B: "translategemma-12b-it-q4/f3dcfd54df14672fbcf0731086fb47a797a943ae"
+    case .hy18B: "hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912"
+    case .hy7B: "hy-mt2-7b-q4/9b7204bdb161490a8ce49ce607c1310cc3fd03ad"
     }
   }
 }
