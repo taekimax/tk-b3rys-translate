@@ -8,6 +8,24 @@ import Tokenizers
 
 private let maximumMessageBytes = 8 * 1024 * 1024
 
+private enum B3rysModelRegistration {
+  /// MLX Swift supports the Gemma families directly. Hy-MT2 uses its own
+  /// Hunyuan architecture, so register the local implementation before the
+  /// factory examines a downloaded Hy model configuration.
+  static func registerModelTypes() async {
+    await LLMTypeRegistry.shared.registerModelType(
+      "hunyuan_v1_dense",
+      creator: { data in
+        let configuration = try JSONDecoder.json5().decode(
+          HunyuanV1DenseConfiguration.self,
+          from: data
+        )
+        return HunyuanV1DenseModel(configuration)
+      }
+    )
+  }
+}
+
 private enum LocalModel: String, Codable, CaseIterable {
   case gemma4E4B = "gemma4-e4b-q4"
   case gemma4_12B = "gemma4-12b-q4"
@@ -60,8 +78,12 @@ private final class Engine {
     for item in paragraphs {
       try Task.checkCancellation()
       let prompt = formattedPromptFor(item: item, request: request, model: model)
-      let generated = try await generate(container: container, prompt: prompt, maxTokens: max(128, min(1024, item.text.utf8.count * 2)))
-      let text = generated.trimmingCharacters(in: .whitespacesAndNewlines)
+      let generated = try await generate(
+        container: container,
+        prompt: prompt,
+        maxTokens: outputTokenBudget(for: item.text)
+      )
+      let text = normalizedTranslation(generated, model: model)
       guard !text.isEmpty, text.utf8.count <= maximumMessageBytes else { throw HostError.invalidOutput }
       results.append(.init(id: item.id, translatedText: text))
       Memory.clearCache()
@@ -105,9 +127,12 @@ private final class Engine {
     // here and encode them directly below, rather than invoking Jinja at all.
     switch model {
     case .gemma4E4B:
-      return "<|turn>user\n\(instruction)<|turn>\n<|turn>model\n"
+      return "<bos><|turn>user\n\(instruction)<turn|>\n<|turn>model\n"
     case .gemma4_12B:
-      return "<|turn>user\n\(instruction)<|turn>\n<|turn>model\n<|channel>thought\n<channel|>"
+      // The non-thinking template opens and immediately closes an empty
+      // thought channel, then the model emits its final answer. Its turn
+      // terminator is `<turn|>` (not `<|turn>`).
+      return "<bos><|turn>user\n\(instruction)<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
     case .translateGemma4B, .translateGemma12B:
       return "<start_of_turn>user\n\(instruction)<end_of_turn>\n<start_of_turn>model\n"
     case .hy18B:
@@ -115,6 +140,33 @@ private final class Engine {
     case .hy7B:
       return "<|startoftext|>\(instruction)<|extra_0|>"
     }
+  }
+
+  /// Page labels and short paragraphs should not pay for a fixed 128-token
+  /// completion. This leaves enough room for a Korean translation while
+  /// bounding the work for each independently queued DOM block.
+  private func outputTokenBudget(for text: String) -> Int {
+    max(48, min(256, text.utf8.count / 2 + 24))
+  }
+
+  private func normalizedTranslation(_ output: String, model: LocalModel) -> String {
+    var result = output
+    // Some converted tokenizers decode end-turn controls as ordinary text
+    // instead of surfacing them as an EOS token to `generateTask`.
+    let stopMarkers = ["<end_of_turn>", "<turn|>", "<|turn>", "<|eos|>", "<｜hy_place▁holder▁no▁2｜>"]
+    for marker in stopMarkers {
+      if let range = result.range(of: marker) {
+        result = String(result[..<range.lowerBound])
+      }
+    }
+    // A malformed Gemma 4 channel response is not a translation. Leave the
+    // rest of the failure handling to return a clear local-host error instead
+    // of injecting model control tokens into the page.
+    if model == .gemma4_12B,
+      result.contains("<|channel>") || result.contains("<channel|>") {
+      return ""
+    }
+    return result.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func generate(container: ModelContainer, prompt: String, maxTokens: Int) async throws -> String {
@@ -143,6 +195,7 @@ private enum HostError: LocalizedError { case invalidRequest, modelsNotFound, in
   static func main() async {
     let protocolOut = FileHandle(fileDescriptor: dup(STDOUT_FILENO), closeOnDealloc: true)
     _ = dup2(STDERR_FILENO, STDOUT_FILENO)
+    await B3rysModelRegistration.registerModelTypes()
     let engine = Engine()
     while let data = readFrame() {
       guard let request = try? JSONDecoder().decode(Request.self, from: data) else { return }
