@@ -59,7 +59,7 @@ private final class Engine {
     var results: [Response.Translation] = []
     for item in paragraphs {
       try Task.checkCancellation()
-      let prompt = promptFor(item: item, request: request, model: model)
+      let prompt = formattedPromptFor(item: item, request: request, model: model)
       let generated = try await generate(container: container, prompt: prompt, maxTokens: max(128, min(1024, item.text.utf8.count * 2)))
       let text = generated.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !text.isEmpty, text.utf8.count <= maximumMessageBytes else { throw HostError.invalidOutput }
@@ -90,19 +90,38 @@ private final class Engine {
     return directory
   }
 
-  private func promptFor(item: TranslationItem, request: Request, model: LocalModel) -> String {
+  private func formattedPromptFor(item: TranslationItem, request: Request, model: LocalModel) -> String {
     let source = request.sourceLang ?? "en", target = request.targetLang ?? "ko"
+    let instruction: String
     if model == .translateGemma4B || model == .translateGemma12B {
-      // The bundled TranslateGemma tokenizer owns the template. Its structured
-      // input is assembled by MLX's tokenizer loader from this unambiguous text.
-      return "Translate the following text from \(source) to \(target). Output only the translation.\n\n\(item.text)"
+      instruction = "Translate the following text from \(source) to \(target). Output only the translation.\n\n\(item.text)"
+    } else {
+      let context = (request.subtitleContext ?? []).suffix(3).map { "\($0.original) => \($0.translated)" }.joined(separator: "\n")
+      instruction = "You are a translation engine. Translate only the input from \(source) to \(target). Preserve meaning and formatting. Output only the translation.\n\nContext (reference only):\n\(context)\n\nInput:\n\(item.text)"
     }
-    let context = (request.subtitleContext ?? []).suffix(3).map { "\($0.original) => \($0.translated)" }.joined(separator: "\n")
-    return "You are a translation engine. Translate only the input from \(source) to \(target). Preserve meaning and formatting. Output only the translation.\n\nContext (reference only):\n\(context)\n\nInput:\n\(item.text)"
+
+    // The downloaded Gemma 4 templates use Jinja features unsupported by the
+    // pinned Swift tokenizer. Format the equivalent single-turn text prompts
+    // here and encode them directly below, rather than invoking Jinja at all.
+    switch model {
+    case .gemma4E4B:
+      return "<|turn>user\n\(instruction)<|turn>\n<|turn>model\n"
+    case .gemma4_12B:
+      return "<|turn>user\n\(instruction)<|turn>\n<|turn>model\n<|channel>thought\n<channel|>"
+    case .translateGemma4B, .translateGemma12B:
+      return "<start_of_turn>user\n\(instruction)<end_of_turn>\n<start_of_turn>model\n"
+    case .hy18B:
+      return "<｜hy_begin▁of▁sentence｜><｜hy_User｜>\(instruction)<｜hy_Assistant｜>"
+    case .hy7B:
+      return "<|startoftext|>\(instruction)<|extra_0|>"
+    }
   }
 
   private func generate(container: ModelContainer, prompt: String, maxTokens: Int) async throws -> String {
-    let input = try await container.prepare(input: UserInput(prompt: prompt))
+    // `prepare(input:)` applies the model's chat template through Jinja.
+    // Direct tokenization is intentional: prompts above already include the
+    // required local-model turn markers and never contact a remote service.
+    let input = LMInput(tokens: MLXArray(await container.encode(prompt)))
     return try await container.perform(nonSendable: input) { context, input in
       let iterator = try TokenIterator(input: input, model: context.model, processor: nil, sampler: ArgMaxSampler(), maxTokens: maxTokens)
       let (stream, task) = generateTask(promptTokenCount: input.text.tokens.size, modelConfiguration: context.configuration, tokenizer: context.tokenizer, iterator: iterator)

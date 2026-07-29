@@ -128,9 +128,10 @@ npm run build
 
 ```bash
 cd native-host
-swift build -c release -j 4
-./install-host.sh <chrome-extension-id>
+zsh ./install-host.sh <chrome-extension-id>
 ```
+
+설치 스크립트가 호스트와 MLX Metal 커널(`mlx.metallib`)을 함께 빌드하고 등록합니다. 처음 실행할 때 Xcode의 **Metal Toolchain** 컴포넌트와 CMake가 필요합니다.
 
 Chrome 툴바에서 확장 프로그램 아이콘을 열어 여섯 모델 중 하나를 고릅니다. API 키나 클라우드 설정은 없습니다.
 
