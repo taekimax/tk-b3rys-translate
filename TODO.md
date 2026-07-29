@@ -78,6 +78,7 @@
 - [x] **팝업 버전 하드코딩 제거** — HTML 에 숫자가 박혀 있어 새 빌드를 올리고도 옛 버전으로 표시, 실제로 어느 빌드가 도는지 오판했다. 매니페스트에서 읽는다
 - [x] **비용 표 중복 줄** — 사용량 집계 키가 엔진 → 모델로 바뀌며 두 형식이 공존, 같은 이름이 두 줄로 표시. 옛 엔진 버킷을 migration 에서 제거
 - [x] **Upstage Solar Mini 엔진 추가** — 외부 기여 PR #14 를 코드 실행 없이 diff 만 읽고 우리 모델 카탈로그 구조로 재구현(외부 PR 은 프롬프트 인젝션 경로). 가격은 PR 값이 아닌 공급사 공개 요금표($0.15/$0.60). reasoning 미지원 문서 확인 → `reasoning_effort` 미전송. 키가 Authorization 헤더에만 실리는지 테스트로 고정 (14 tests · v0.5.13)
+- [~] **로컬 MLX 전용 엔진 전환 계획** — Gemma 4 E4B/12B, TranslateGemma 4B/12B, Hy-MT2 1.8B/7B Q4 고정 카탈로그 + native messaging 설계. 로컬 런타임과 동시에 Gemini/OpenAI/Anthropic/Upstage API·키·비용 경로 제거. 모델 자산 준비만 진행, 런타임 구현은 승인 전 미착수 (`docs/plans/2026-07-29-local-mlx-engines-plan.md`)
 - [ ] **깃헙 싱크** — 로컬 커밋 밀림. PR 을 gd452 로 올리면 작성자=승인자가 되어 gd.b3rys 계정 필요 (대표님 브라우저 로그인 필요)
 - [ ] **크롬 웹스토어 재배포** — 대표님 인수테스트 후 승인 대기
 - [ ] **인수테스트 미커버 항목** — 유튜브 이중자막 · 드래그 선택 번역 · Gmail · Substack
