@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DEBOUNCE_DELAY } from '@/utils/constants';
+import { DATA_ATTRS, DEBOUNCE_DELAY } from '@/utils/constants';
 
 // Must import after mocking
 import { observeDynamicContent } from '@/entrypoints/content/observer';
@@ -128,6 +128,37 @@ describe('observeDynamicContent', () => {
 
     await vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY + 50);
     expect(callback).toHaveBeenCalledWith('added');
+
+    unsubscribe();
+  });
+
+  it("reports 'added' when original text changes", async () => {
+    const callback = vi.fn();
+    const p = document.createElement('p');
+    p.textContent = 'Original content';
+    document.body.appendChild(p);
+
+    const unsubscribe = observeDynamicContent(callback);
+    p.firstChild!.textContent = 'Updated content';
+
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY + 50);
+    expect(callback).toHaveBeenCalledWith('added');
+
+    unsubscribe();
+  });
+
+  it('ignores text changes inside translation-owned elements', async () => {
+    const callback = vi.fn();
+    const translated = document.createElement('span');
+    translated.setAttribute(DATA_ATTRS.TRANSLATED, 'true');
+    translated.textContent = '번역';
+    document.body.appendChild(translated);
+
+    const unsubscribe = observeDynamicContent(callback);
+    translated.firstChild!.textContent = '수정된 번역';
+
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY + 50);
+    expect(callback).not.toHaveBeenCalled();
 
     unsubscribe();
   });

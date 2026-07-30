@@ -56,7 +56,10 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
   });
 
   // FAB
-  const fab = document.createElement('div');
+  const fab = document.createElement('button');
+  fab.type = 'button';
+  fab.setAttribute('aria-label', 'Translate page');
+  fab.title = 'Translate page';
   fab.className = 'b3rys-fab';
   fab.setAttribute('data-state', 'idle');
   fab.innerHTML = `

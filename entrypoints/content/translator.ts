@@ -1,16 +1,16 @@
 import type { TextBlock, TranslationMode } from '@/types';
 import type { TranslateBatchResponse, CacheLookupResponse } from '@/utils/messaging';
 import {
-  BATCH_SIZE,
-  PIPELINE_CONCURRENCY,
   DATA_ATTRS,
   TRANSLATABLE_TAGS,
   LANG_STORAGE_KEY,
   DEFAULT_TARGET_LANG,
 } from '@/utils/constants';
+import type { TranslationContext } from '@/utils/translation-context';
+import { TRANSLATION_CONTEXT_VERSION } from '@/utils/translation-context';
 import { getSiteRule } from '@/utils/site-rules';
 import { isFighting, recordInjection, resetFightGuard } from '@/utils/fight-guard';
-import { detectTextBlocks } from './text-detector';
+import { detectTextBlocks, getDetectedSourceText } from './text-detector';
 import { isContextInvalidated, markContextInvalidated } from './context-invalidated';
 import { dbg, isDebug } from '@/utils/debug';
 
@@ -314,6 +314,8 @@ function releaseUntranslatedClaims(): void {
  */
 export type TranslationResult = 'done' | 'cancelled' | 'empty';
 
+type BlockOutcome = 'injected' | 'cached' | 'failed' | 'detached' | 'stale' | 'fatal';
+
 /** Current target language (storage) — fingerprint for reveal-in-place. */
 async function getTargetLang(): Promise<string> {
   try {
@@ -325,9 +327,35 @@ async function getTargetLang(): Promise<string> {
   }
 }
 
+/** Resolve one immutable page context for the whole progressive pass. */
+async function getPageContext(): Promise<TranslationContext | null> {
+  try {
+    const context = await chrome.runtime.sendMessage({ type: 'GET_TRANSLATION_CONTEXT' });
+    if (
+      context &&
+      context.version === TRANSLATION_CONTEXT_VERSION &&
+      context.mode === 'page' &&
+      typeof context.fingerprint === 'string' &&
+      typeof context.sourceLang === 'string' &&
+      typeof context.targetLang === 'string' &&
+      typeof context.modelId === 'string'
+    ) {
+      return context as TranslationContext;
+    }
+  } catch {
+    // Context resolution is an optimization and a safety fingerprint. The
+    // background still resolves current settings for a legacy/failing caller.
+  }
+  return null;
+}
+
 export async function translatePage(
   onProgress?: (completed: number, total: number) => void,
 ): Promise<TranslationResult> {
+  const gen = ++translateGen;
+  const pageContext = await getPageContext();
+  if (gen !== translateGen) return 'cancelled';
+
   // Purge CSS-hidden translations left over from a previous toggle-off
   // (they're display:none, so removal causes no layout shift). ONLY then —
   // purging unconditionally strips every BLOCK_ID and rips live translations
@@ -343,7 +371,10 @@ export async function translatePage(
     // so an unchanged page resolves as a cheap 'empty' pass).
     const currentLang = await getTargetLang();
     const hiddenTranslations = document.querySelectorAll(`[${DATA_ATTRS.TRANSLATED}]`);
-    if (hiddenTranslations.length > 0 && document.body.dataset.b3rysLang === currentLang) {
+    const sameContext = pageContext
+      ? document.body.dataset.b3rysContext === pageContext.fingerprint
+      : document.body.dataset.b3rysLang === currentLang;
+    if (hiddenTranslations.length > 0 && sameContext) {
       setDebugPhase('reveal-in-place');
       dbg('reveal-in-place: %d translations', hiddenTranslations.length);
       const scroller = getScrollContainer(hiddenTranslations[0]);
@@ -376,7 +407,6 @@ export async function translatePage(
     scrollEl.style.overflowAnchor = prevAnchor;
   };
 
-  const gen = ++translateGen;
   // Fight guard: blocks the app keeps re-rendering (wiping our injection) are
   // yielded after a few rounds — retranslating them just fights the app's
   // renderer (visible stutter + breaker pressure). Filtered blocks make the
@@ -392,7 +422,7 @@ export async function translatePage(
 
   // Phase 0: cached paragraphs paint instantly — no API call, no rate-limit
   // slot. Only genuine misses continue into the batched API phases below.
-  const misses = await injectCachedTranslations(allBlocks, gen);
+  const misses = await injectCachedTranslations(allBlocks, gen, pageContext);
   if (gen !== translateGen) {
     restoreScrollStyles();
     return 'cancelled';
@@ -400,26 +430,27 @@ export async function translatePage(
   completed += total - misses.length;
   if (completed > 0) onProgress?.(completed, total);
   if (misses.length === 0) {
-    document.body.dataset.b3rysLang = await getTargetLang();
+    if (pageContext) document.body.dataset.b3rysContext = pageContext.fingerprint;
+    document.body.dataset.b3rysLang = pageContext?.targetLang ?? (await getTargetLang());
     restoreScrollStyles();
     return 'done';
   }
 
-  const { mainViewport, sideViewport, remaining } = classifyBlocks(misses);
-
-  // One priority-ordered POOL (not a fixed batch array). Initial order:
-  // main-viewport → side-viewport → remaining (distance-sorted). The pipeline
-  // re-sorts the not-yet-dispatched blocks whenever the user scrolls, so the
-  // queue follows the eyes instead of being a fixed snapshot from start.
-  const ordered = [...mainViewport, ...sideViewport, ...remaining];
-
-  const result = await runPipeline(ordered, PIPELINE_CONCURRENCY, gen, (n) => {
-    completed += n;
-    onProgress?.(completed, total);
-  });
+  // The local SLM is serialized. Dispatch one detected block at a time so the
+  // native terminal response is also the visual delivery boundary.
+  const result = await runPipeline(
+    misses,
+    gen,
+    (n) => {
+      completed += n;
+      onProgress?.(completed, total);
+    },
+    pageContext,
+  );
 
   if (result === 'done') {
-    document.body.dataset.b3rysLang = await getTargetLang();
+    if (pageContext) document.body.dataset.b3rysContext = pageContext.fingerprint;
+    document.body.dataset.b3rysLang = pageContext?.targetLang ?? (await getTargetLang());
   }
   restoreScrollStyles();
   if (result === 'done' && getSiteRule()?.repaintAfterInject) {
@@ -454,97 +485,28 @@ function viewportDistance(el: Element): number {
   return Math.min(Math.abs(rect.top), Math.abs(rect.top - vh));
 }
 
-/** Leading+trailing throttle: runs at most once per `ms`, and once more after. */
-function throttle(fn: () => void, ms: number): () => void {
-  let last = 0;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  return () => {
-    const now = Date.now();
-    const wait = ms - (now - last);
-    if (wait <= 0) {
-      last = now;
-      fn();
-    } else if (timer === null) {
-      timer = setTimeout(() => {
-        timer = null;
-        last = Date.now();
-        fn();
-      }, wait);
-    }
-  };
-}
-
-/**
- * Drain a priority POOL of blocks with a fixed pool of `concurrency` workers.
- *
- * - No phase barriers: a worker pulls the next-nearest blocks the instant it's
- *   free, so the pool stays saturated (vs. the old Phase 1a→1b→2 idling).
- * - Scroll-following: a throttled scroll handler re-sorts the pending blocks by
- *   *current* viewport distance, so whatever the user scrolls to is translated
- *   next — the queue tracks the eyes rather than a start-time snapshot.
- * - Bounded concurrency avoids the old unbounded viewport burst (rate-limit safe).
- */
 async function runPipeline(
   blocks: TextBlock[],
-  concurrency: number,
   gen: number,
-  onBatchDone: (count: number) => void,
+  onBlockSettled: (count: number) => void,
+  context: TranslationContext | null,
 ): Promise<'done' | 'cancelled'> {
-  let pending = blocks.slice();
+  const pending = blocks.slice();
   dbg('pipeline start: %d blocks, gen=%d', pending.length, gen);
 
-  // Drop a block whose node left the DOM (virtualized lists remove off-screen
-  // nodes; a detached rect is (0,0) and would sort as "nearest", starving the
-  // blocks the user actually sees). Strip BLOCK_ID so if the SAME node is
-  // re-attached later it re-detects cleanly (otherwise [R1] would reject it
-  // forever), and count it toward progress so the gauge still reaches 100%.
-  const dropDetached = (b: TextBlock): void => {
-    b.element.removeAttribute(DATA_ATTRS.BLOCK_ID);
-    onBatchDone(1);
-  };
+  while (pending.length > 0) {
+    if (gen !== translateGen) return 'cancelled';
 
-  // Re-order not-yet-dispatched blocks toward the current viewport. Distance is
-  // measured ONCE per block (n rect reads, one layout flush) then cached — a
-  // naive comparator would call getBoundingClientRect O(n log n) times.
-  const resort = throttle(() => {
-    if (gen !== translateGen) return;
-    const alive: TextBlock[] = [];
-    for (const b of pending) {
-      if (b.element.isConnected) alive.push(b);
-      else dropDetached(b);
-    }
-    pending = alive;
-    const dist = new Map<TextBlock, number>();
-    for (const b of pending) dist.set(b, viewportDistance(b.element));
-    pending.sort((a, b) => (dist.get(a) ?? 0) - (dist.get(b) ?? 0));
-  }, 180);
-  window.addEventListener('scroll', resort, { passive: true });
-
-  try {
-    const worker = async (): Promise<void> => {
-      while (pending.length > 0) {
-        if (gen !== translateGen) return;
-        // Pull nearest blocks first, skipping any that got detached since sort
-        const batch: TextBlock[] = [];
-        while (batch.length < BATCH_SIZE && pending.length > 0) {
-          const b = pending.shift()!;
-          if (b.element.isConnected) batch.push(b);
-          else dropDetached(b);
-        }
-        if (batch.length === 0) continue;
-        setDebugPhase('batch-inject');
-        await processBatch(batch, gen);
-        if (gen !== translateGen) return;
-        dbg('batch done (%d blocks), pending=%d', batch.length, pending.length);
-        onBatchDone(batch.length);
-      }
-    };
-    const poolSize = Math.max(1, Math.min(concurrency, Math.ceil(pending.length / BATCH_SIZE)));
-    await Promise.all(Array.from({ length: poolSize }, () => worker()));
-  } finally {
-    window.removeEventListener('scroll', resort);
+    const nextIndex = pickNextBlockIndex(pending);
+    const block = pending.splice(nextIndex, 1)[0];
+    setDebugPhase('block-inject');
+    const outcome = await processBlock(block, gen, context);
+    if (outcome !== 'stale' && outcome !== 'fatal') onBlockSettled(1);
+    if (gen !== translateGen || outcome === 'fatal') return 'cancelled';
+    dbg('block settled (%s), pending=%d', outcome, pending.length);
   }
 
+  // A page pass is complete only after every block reached a terminal outcome.
   if (gen !== translateGen) {
     cleanupLoaders();
     dbg('pipeline cancelled (gen changed)');
@@ -554,54 +516,52 @@ async function runPipeline(
   return 'done';
 }
 
-function classifyBlocks(allBlocks: TextBlock[]): {
-  mainViewport: TextBlock[];
-  sideViewport: TextBlock[];
-  remaining: TextBlock[];
-} {
+function mainContentSelector(): string {
+  return getSiteRule()?.mainContentSelector ?? 'article, main, [role="main"], [role="article"]';
+}
+
+function hasMainContentArea(): boolean {
+  return document.querySelector(mainContentSelector()) !== null;
+}
+
+function isMainContentBlock(block: TextBlock, hasMainArea: boolean): boolean {
+  return hasMainArea && block.element.closest(mainContentSelector()) !== null;
+}
+
+function priorityRank(block: TextBlock, hasMainArea: boolean): number {
   const viewportHeight = window.innerHeight;
-  const viewportBlocks: TextBlock[] = [];
-  const remaining: TextBlock[] = [];
+  const rect = block.element.getBoundingClientRect();
+  const visible = rect.bottom > 0 && rect.top < viewportHeight;
+  const main = isMainContentBlock(block, hasMainArea);
+  if (visible && main) return 0;
+  if (visible) return 1;
+  if (main) return 2;
+  return 3;
+}
 
-  for (const block of allBlocks) {
-    const rect = block.element.getBoundingClientRect();
-    if (rect.bottom > 0 && rect.top < viewportHeight) {
-      viewportBlocks.push(block);
-    } else {
-      remaining.push(block);
-    }
-  }
+/** Pick the best currently connected block immediately before each request. */
+function pickNextBlockIndex(blocks: TextBlock[]): number {
+  const ordered = sortBlocksByPagePriority(blocks);
+  const next = ordered[0];
+  return Math.max(0, blocks.indexOf(next));
+}
 
-  // Sort remaining by distance from viewport
-  remaining.sort((a, b) => {
-    const rectA = a.element.getBoundingClientRect();
-    const rectB = b.element.getBoundingClientRect();
-    const distA = Math.min(Math.abs(rectA.top), Math.abs(rectA.top - viewportHeight));
-    const distB = Math.min(Math.abs(rectB.top), Math.abs(rectB.top - viewportHeight));
-    return distA - distB;
-  });
-
-  // Split viewport into main content vs sidebar/nav for priority ordering
-  const rule = getSiteRule();
-  const MAIN_SELECTOR =
-    rule?.mainContentSelector ?? 'article, main, [role="main"], [role="article"]';
-  const hasMainArea = !!document.querySelector(MAIN_SELECTOR);
-  const mainViewport: TextBlock[] = [];
-  const sideViewport: TextBlock[] = [];
-
-  if (hasMainArea) {
-    for (const block of viewportBlocks) {
-      if (block.element.closest(MAIN_SELECTOR)) {
-        mainViewport.push(block);
-      } else {
-        sideViewport.push(block);
-      }
-    }
-  } else {
-    mainViewport.push(...viewportBlocks);
-  }
-
-  return { mainViewport, sideViewport, remaining };
+/**
+ * Best-effort page priority. It ranks detected units only; it never filters
+ * them out, because arbitrary sites do not expose a universal article signal.
+ */
+export function sortBlocksByPagePriority(blocks: TextBlock[]): TextBlock[] {
+  const hasMainArea = hasMainContentArea();
+  return blocks
+    .map((block, index) => ({ block, index }))
+    .sort((a, b) => {
+      const rankA = priorityRank(a.block, hasMainArea);
+      const rankB = priorityRank(b.block, hasMainArea);
+      if (rankA !== rankB) return rankA - rankB;
+      const distance = viewportDistance(a.block.element) - viewportDistance(b.block.element);
+      return distance || a.index - b.index;
+    })
+    .map(({ block }) => block);
 }
 
 /**
@@ -610,11 +570,19 @@ function classifyBlocks(allBlocks: TextBlock[]): {
  * only new paragraphs consume API calls / rate-limit slots.
  * Lookup failure is non-fatal: everything falls back to the normal batch path.
  */
-async function injectCachedTranslations(blocks: TextBlock[], gen: number): Promise<TextBlock[]> {
+async function injectCachedTranslations(
+  blocks: TextBlock[],
+  gen: number,
+  context: TranslationContext | null,
+): Promise<TextBlock[]> {
   try {
     const response: CacheLookupResponse = await chrome.runtime.sendMessage({
       type: 'CACHE_LOOKUP',
-      paragraphs: blocks.map((b) => ({ id: b.id, text: b.html })),
+      // The detector already produced the canonical visible text. Sending
+      // HTML here makes small local models see markup and encourages them to
+      // echo structure or stop early.
+      paragraphs: blocks.map((b) => ({ id: b.id, text: b.text })),
+      context: context ?? undefined,
     });
     if (gen !== translateGen) return [];
 
@@ -656,6 +624,11 @@ async function injectCachedTranslations(blocks: TextBlock[], gen: number): Promi
         const injectSlice = () => {
           while (i < hitBlocks.length && performance.now() < sliceEnd) {
             const block = hitBlocks[i++];
+            if (!sourceMatchesBlock(block)) {
+              block.element.removeAttribute(DATA_ATTRS.BLOCK_ID);
+              hits.delete(block.id);
+              continue;
+            }
             injectTranslation(block.element, hits.get(block.id)!);
             recordInjection(block.text, Date.now(), isScrollDriven());
           }
@@ -810,103 +783,95 @@ export function purgeAllTranslations(): void {
   document.body.classList.remove(REPLACE_MODE_CLASS);
 }
 
-// --- Batch processing ---
+// --- Single-block processing ---
 
-async function processBatch(batch: TextBlock[], gen: number): Promise<void> {
-  if (gen !== translateGen) return;
+function sourceMatchesBlock(block: TextBlock): boolean {
+  if (!block.element.isConnected) return false;
+  if (block.element.getAttribute(DATA_ATTRS.BLOCK_ID) !== block.id) return false;
+  const expected = block.text.trim().replace(/\s+/g, ' ');
+  return getDetectedSourceText(block.element) === expected;
+}
 
-  // Every DOM mutation below is compensated against the batch's own scroller —
-  // un-compensated loader/error/injection churn above the viewport is what
-  // made pages stutter while the user scrolled (esp. inner-scroller apps).
-  const scroller = getScrollContainer(batch[0].element);
+async function processBlock(
+  block: TextBlock,
+  gen: number,
+  context: TranslationContext | null,
+): Promise<BlockOutcome> {
+  if (gen !== translateGen) return 'stale';
+  if (!block.element.isConnected) {
+    block.element.removeAttribute(DATA_ATTRS.BLOCK_ID);
+    return 'detached';
+  }
 
-  const batchEls = batch.map((b) => b.element);
-  let loaders: HTMLElement[] = [];
-  withScrollCompensation(
-    scroller,
-    () => {
-      loaders = batch.map((block) => showLoading(block.element));
-    },
-    batchEls,
-  );
+  // Every loader/error/injection mutation remains scroll-compensated. There is
+  // intentionally only one live page block and one native generation here.
+  const scroller = getScrollContainer(block.element);
+  let loader: HTMLElement | null = null;
+  withScrollCompensation(scroller, () => {
+    loader = showLoading(block.element);
+  }, [block.element]);
+
+  const removeLoader = (): void => {
+    if (!loader) return;
+    withScrollCompensation(scroller, () => loader?.remove(), [block.element]);
+  };
 
   try {
     const response: TranslateBatchResponse = await chrome.runtime.sendMessage({
       type: 'TRANSLATE_BATCH',
-      paragraphs: batch.map((b) => ({ id: b.id, text: b.html })),
+      // Keep the local-SLM request plain text. `block.html` is only for
+      // rendering the translation back into the page.
+      paragraphs: [{ id: block.id, text: block.text }],
+      context: context ?? undefined,
     });
 
     if (gen !== translateGen) {
-      withScrollCompensation(
-        scroller,
-        () => loaders.forEach((loader) => loader.remove()),
-        batchEls,
-      );
-      return;
+      removeLoader();
+      return 'stale';
     }
 
     if (response.error) {
+      removeLoader();
       if (response.localHostError) {
-        withScrollCompensation(
-          scroller,
-          () => loaders.forEach((loader) => loader.remove()),
-          batchEls,
-        );
-        translateGen++; // Cancel all in-flight batches
+        translateGen++;
         await chrome.storage.local.set({ localHostErrorMessage: response.error });
         chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch(() => {});
-        return;
+        return 'fatal';
       }
-      withScrollCompensation(
-        scroller,
-        () => {
-          loaders.forEach((loader) => loader.remove());
-          batch.forEach((block) => showError(block.element, response.error!));
-        },
-        batchEls,
-      );
-      return;
+      withScrollCompensation(scroller, () => showError(block.element, response.error!), [
+        block.element,
+      ]);
+      return 'failed';
     }
 
-    const blockMap = new Map(batch.map((b) => [b.id, b]));
-    withScrollCompensation(
-      scroller,
-      () => {
-        loaders.forEach((loader) => loader.remove());
-        for (const result of response.translations) {
-          const block = blockMap.get(result.id);
-          if (block) {
-            injectTranslation(block.element, result.translatedText);
-            recordInjection(block.text, Date.now(), isScrollDriven());
-          }
-        }
-      },
-      batchEls,
-    );
+    const result = response.translations.find((item) => item.id === block.id);
+    if (!result || !sourceMatchesBlock(block)) {
+      removeLoader();
+      block.element.removeAttribute(DATA_ATTRS.BLOCK_ID);
+      return 'stale';
+    }
+
+    withScrollCompensation(scroller, () => {
+      loader?.remove();
+      injectTranslation(block.element, result.translatedText, { plainText: true });
+      recordInjection(block.text, Date.now(), isScrollDriven());
+    }, [block.element]);
+    return 'injected';
   } catch (err) {
     if (isContextInvalidated(err)) {
-      loaders.forEach((loader) => loader.remove());
+      removeLoader();
       translateGen++;
       markContextInvalidated();
-      return;
+      return 'fatal';
     }
     if (gen !== translateGen) {
-      withScrollCompensation(
-        scroller,
-        () => loaders.forEach((loader) => loader.remove()),
-        batchEls,
-      );
-      return;
+      removeLoader();
+      return 'stale';
     }
     const msg = err instanceof Error ? err.message : 'Translation failed';
-    withScrollCompensation(
-      scroller,
-      () => {
-        loaders.forEach((loader) => loader.remove());
-        batch.forEach((block) => showError(block.element, msg));
-      },
-      batchEls,
-    );
+    removeLoader();
+    withScrollCompensation(scroller, () => showError(block.element, msg), [block.element]);
+    return 'failed';
   }
 }
 
@@ -944,11 +909,17 @@ export function findTextLabel(container: HTMLElement, blockText: string): HTMLEl
   return deepest;
 }
 
-export function injectTranslation(element: HTMLElement, translatedText: string): void {
+export function injectTranslation(
+  element: HTMLElement,
+  translatedText: string,
+  options: { plainText?: boolean } = {},
+): void {
   removePriorTranslation(element);
 
   const text = element.textContent?.trim() ?? '';
-  const sanitized = sanitizeHTML(translatedText);
+  const sanitized = options.plainText
+    ? escapePlainText(translatedText)
+    : sanitizeHTML(translatedText);
   // Detect truncation BEFORE modifying DOM (computed styles may change after)
   const truncated = isContentTruncated(element);
 
@@ -1361,6 +1332,16 @@ function sanitizeHTML(html: string): string {
   template.innerHTML = html;
   sanitizeNode(template.content);
   return template.innerHTML;
+}
+
+/** Escape accepted local-model output before the existing insertion helpers use innerHTML. */
+function escapePlainText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function sanitizeNode(node: Node): void {

@@ -148,11 +148,13 @@ describe('GitHub README (markdown rendering)', () => {
     expect(texts.some((t) => t.includes('import { createApp } from'))).toBe(false);
   });
 
-  it('detects table cells', () => {
+  it('skips terse table cells while retaining substantive cells', () => {
     setupDOM(loadFixture('github-readme'));
     const blocks = detectTextBlocks(document.body);
     const tdBlocks = blocks.filter((b) => b.element.tagName === 'TD' || b.element.tagName === 'TH');
-    expect(tdBlocks.length).toBeGreaterThanOrEqual(1);
+    expect(tdBlocks.map((block) => block.text)).toContain(
+      'Server listening port for incoming HTTP requests',
+    );
   });
 
   it('inject + removeAll roundtrip is clean', () => {
@@ -221,12 +223,12 @@ describe('GitHub PR (comments and reviews)', () => {
 // ============================================================
 
 describe('Existing fixtures (regression)', () => {
-  it('github-sidebar: detects LI menu items', () => {
+  it('github-sidebar: skips terse menu labels', () => {
     setupDOM(loadFixture('github-sidebar'));
     const blocks = detectTextBlocks(document.body);
     const texts = blocks.map((b) => b.text);
-    expect(texts).toContain('Public profile');
-    expect(texts).toContain('Account');
+    expect(texts).not.toContain('Public profile');
+    expect(texts).not.toContain('Account');
   });
 
   it('substack-title: detects standalone A and DIV', () => {

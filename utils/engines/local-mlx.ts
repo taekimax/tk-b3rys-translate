@@ -8,6 +8,16 @@ interface NativeTranslationResponse {
   error?: { code: string; message: string };
 }
 
+export class NativeTranslationError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'NativeTranslationError';
+    this.code = code;
+  }
+}
+
 let port: chrome.runtime.Port | null = null;
 let nextRequestId = 0;
 const pending = new Map<
@@ -22,7 +32,8 @@ function connect(): chrome.runtime.Port {
     const request = pending.get(message.requestId);
     if (!request) return;
     pending.delete(message.requestId);
-    if (message.error) request.reject(new Error(message.error.message));
+    if (message.error)
+      request.reject(new NativeTranslationError(message.error.code, message.error.message));
     else request.resolve({ translations: message.translations ?? [] });
   });
   port.onDisconnect.addListener(() => {

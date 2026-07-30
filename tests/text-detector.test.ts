@@ -28,26 +28,25 @@ beforeEach(() => {
 // ============================================================
 
 describe('GitHub sidebar (Phase 1 — LI detection)', () => {
-  it('detects all LI menu items', () => {
+  it('skips short LI menu labels', () => {
     setupDOM(loadFixture('github-sidebar'));
     const blocks = detectTextBlocks(document.body);
 
     const texts = blocks.map((b) => b.text);
-    expect(texts).toContain('Public profile');
-    expect(texts).toContain('Account');
-    expect(texts).toContain('Appearance');
-    expect(texts).toContain('Notifications');
-    expect(texts).toContain('Password and authentication');
-    expect(texts).toContain('Settings');
+    expect(texts).not.toContain('Public profile');
+    expect(texts).not.toContain('Account');
+    expect(texts).not.toContain('Appearance');
+    expect(texts).not.toContain('Notifications');
+    expect(texts).not.toContain('Password and authentication');
+    expect(texts).not.toContain('Settings');
   });
 
-  it('detects short text like "Account" (7 chars)', () => {
+  it('does not create a model request for short text like "Account"', () => {
     setupDOM(loadFixture('github-sidebar'));
     const blocks = detectTextBlocks(document.body);
 
     const account = blocks.find((b) => b.text === 'Account');
-    expect(account).toBeDefined();
-    expect(account!.element.tagName).toBe('LI');
+    expect(account).toBeUndefined();
   });
 });
 
@@ -63,9 +62,10 @@ describe('Anthropic news list (composite-cell rows)', () => {
     const blocks = detectTextBlocks(document.body);
     const texts = blocks.map((b) => b.text);
 
-    expect(texts).toContain('Introducing Claude for Teachers');
-    expect(texts).toContain('Product');
-    expect(texts).toContain('Jul 14, 2026');
+    expect(texts).toContain('Anthropic commits $10 million to Canadian AI research');
+    expect(texts).not.toContain('Introducing Claude for Teachers');
+    expect(texts).not.toContain('Product');
+    expect(texts).not.toContain('Jul 14, 2026');
 
     // The glued row/header text must never appear as a single unit
     for (const t of texts) {
@@ -78,9 +78,11 @@ describe('Anthropic news list (composite-cell rows)', () => {
     const blocks = detectTextBlocks(document.body);
     const texts = blocks.map((b) => b.text);
 
-    expect(texts).toContain('Date');
-    expect(texts).toContain('Category');
-    expect(texts).toContain('Title');
+    // These one-word cell labels are intentionally filtered before they
+    // become model requests.
+    expect(texts).not.toContain('Date');
+    expect(texts).not.toContain('Category');
+    expect(texts).not.toContain('Title');
     expect(texts).not.toContain('DateCategoryTitle');
   });
 
@@ -230,6 +232,41 @@ describe('URL text skipped', () => {
   });
 });
 
+describe('short non-sentence blocks', () => {
+  it('skips short labels but keeps headings and sentence-like fragments', () => {
+    setupDOM(`
+      <h2>Markets</h2>
+      <p>By</p>
+      <p>Research</p>
+      <p>Fed may act.</p>
+      <p>This is a longer article fragment worth translating.</p>
+    `);
+
+    const texts = detectTextBlocks(document.body).map((block) => block.text);
+
+    expect(texts).toContain('Markets');
+    expect(texts).not.toContain('By');
+    expect(texts).not.toContain('Research');
+    expect(texts).toContain('Fed may act.');
+    expect(texts).toContain('This is a longer article fragment worth translating.');
+  });
+
+  it('uses the wider short limit for metadata clusters', () => {
+    setupDOM(`
+      <div class="BylineContainer"><p>By</p><a href="/news/author/greg-ip">Greg Ip</a></div>
+      <div class="TimeTag"><p>July 30, 2026 5:00 am ET</p></div>
+      <p>This is meaningful article content.</p>
+    `);
+
+    const texts = detectTextBlocks(document.body).map((block) => block.text);
+
+    expect(texts).not.toContain('By');
+    expect(texts).not.toContain('Greg Ip');
+    expect(texts).not.toContain('July 30, 2026 5:00 am ET');
+    expect(texts).toContain('This is meaningful article content.');
+  });
+});
+
 // ============================================================
 // 상단 메뉴의 짧은 라벨
 // ============================================================
@@ -265,22 +302,20 @@ describe('navigation labels', () => {
     expect(texts.some((text) => text.includes('production applications'))).toBe(true);
   });
 
-  it('keeps translating a sidebar nav — only the header menu is skipped', () => {
-    // GitHub 설정 사이드바가 이 경우다. nav 라는 이유만으로 막으면 이게 죽는다.
+  it('skips short sidebar labels as well as header labels', () => {
     const container = setupDOM(
       `<nav aria-label="Settings"><ul><li><a href="/s">Account</a></li></ul></nav>`,
     );
 
-    expect(detectTextBlocks(container).map((b) => b.text)).toContain('Account');
+    expect(detectTextBlocks(container).map((b) => b.text)).not.toContain('Account');
   });
 
-  it('leaves short text outside a nav alone', () => {
-    // 본문의 짧은 문구까지 건드리면 안 된다.
+  it('skips short non-sentence text outside a nav too', () => {
     const container = setupDOM(`<article><p>Research</p><p>Policy</p></article>`);
 
     const texts = detectTextBlocks(container).map((block) => block.text);
 
-    expect(texts).toContain('Research');
-    expect(texts).toContain('Policy');
+    expect(texts).not.toContain('Research');
+    expect(texts).not.toContain('Policy');
   });
 });

@@ -175,14 +175,15 @@ describe('Skilljar fixture skipSelectors', () => {
     expect(rule!.skipSelectors).toContain('.clp__enroll-btn');
   });
 
-  it('detects stat labels and other content, skips enroll button', () => {
+  it('skips terse stat labels and detects substantive course content', () => {
     setupDOM(loadFixture('skilljar-course'));
     const blocks = detectTextBlocks(document.body);
     const texts = blocks.map((b) => b.text);
 
-    // "Translate everything" — stat labels are now detected
-    expect(texts.some((t) => t.includes('lectures'))).toBe(true);
-    expect(texts.some((t) => t.includes('hour of video'))).toBe(true);
+    // Terse labels are intentionally omitted; they add little value and often
+    // belong to metadata/stat chrome rather than the reading body.
+    expect(texts.some((t) => t.includes('lectures'))).toBe(false);
+    expect(texts.some((t) => t.includes('hour of video'))).toBe(false);
 
     // Should NOT detect enroll button (skipSelectors)
     expect(texts.some((t) => t.includes('Register'))).toBe(false);
@@ -246,7 +247,7 @@ describe('Skilljar full page fixture', () => {
 
     expect(texts.some((t) => t.includes('What is Claude?'))).toBe(true);
     expect(texts.some((t) => t.includes('Other ways to work with Claude'))).toBe(true);
-    expect(texts.some((t) => t.includes('Certificate of completion'))).toBe(true);
+    expect(texts.some((t) => t.includes('Certificate of completion'))).toBe(false);
   });
 
   it('detects FAQ question text', () => {
@@ -335,14 +336,13 @@ describe('GitHub Settings fixture', () => {
     expect(translated!.className).not.toContain('inline');
   });
 
-  it('detects all button text (translate-everything, no [F9] filter)', () => {
+  it('skips terse button labels', () => {
     setupDOM(loadFixture('github-settings'));
     const blocks = detectTextBlocks(document.body);
     const texts = blocks.map((b) => b.text);
 
-    // "Translate everything" — button text is now detected
-    expect(texts.some((t) => t.includes('Set up templates'))).toBe(true);
-    expect(texts.some((t) => t.includes('Set up sponsor button'))).toBe(true);
+    expect(texts.some((t) => t.includes('Set up templates'))).toBe(false);
+    expect(texts.some((t) => t.includes('Set up sponsor button'))).toBe(false);
   });
 
   it('restores checkbox label after inject → removeAll', () => {

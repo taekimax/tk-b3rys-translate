@@ -41,6 +41,15 @@ export function observeDynamicContent(onNewContent: (kind: ContentChangeKind) =>
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === 'characterData') {
+        // Translation text is owned by us and must not trigger an incremental
+        // pass. Text changes in the site's original DOM can invalidate an
+        // in-flight block and need a follow-up detection pass.
+        const parent = mutation.target.parentElement;
+        if (parent?.closest('[data-b3rys-translated], [data-b3rys-loader]')) continue;
+        pendingKind = pendingKind ?? 'added';
+        continue;
+      }
       if (mutation.type !== 'childList') continue;
       for (const node of mutation.removedNodes) {
         if (removedDetectedBlock(node)) {
@@ -70,6 +79,7 @@ export function observeDynamicContent(onNewContent: (kind: ContentChangeKind) =>
   observer.observe(document.body, {
     childList: true,
     subtree: true,
+    characterData: true,
   });
 
   return () => {

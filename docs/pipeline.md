@@ -21,7 +21,7 @@
 │                                           └────┬───┘        │      │
 │                                          필터 체인 ◄─────────┘      │
 │                                                │                   │
-│                                          processBatch() × N        │
+│                                      processBlock() × N           │
 │                                                │                   │
 │                                    chrome.runtime.sendMessage      │
 └────────────────────────────────────────────────┼───────────────────┘
@@ -253,24 +253,38 @@ Parallel 모드: 둘 다 표시
 
 ---
 
-## 6. 배치 처리 + viewport 우선순위
+## 6. 로컬 SLM 단일 블록 처리 + viewport 우선순위
 
 ```
 detectTextBlocks() 결과
   │
-  ├─ viewport 안 블록 ──→ main 영역 / side 영역 분리
-  │   │                    │
-  │   │                    ├─ Phase 1a: main 영역 (최우선)
-  │   │                    │   VIEWPORT_BATCH_SIZE(5)개씩 병렬
-  │   │                    │
-  │   │                    └─ Phase 1b: side 영역
-  │   │                        VIEWPORT_BATCH_SIZE(5)개씩 병렬
-  │   │
-  └─ viewport 밖 블록 ──→ 거리순 정렬
+  └─ pending TextBlock 풀
       │
-      └─ Phase 2: BATCH_SIZE(15)개씩
-         PARALLEL_BATCH_COUNT(3)그룹 동시
+      ├─ 매 요청 직전 현재 위치를 다시 평가
+      │   ├─ visible + main area
+      │   ├─ visible + other area
+      │   ├─ offscreen + main area
+      │   └─ offscreen + other area (거리/DOM 순)
+      │
+      └─ 한 번에 하나의 TextBlock만 native 요청
+          │
+          ├─ 응답 도착 → 즉시 한 블록 주입
+          └─ 다음 우선순위 블록 선택
 
 사용자 체감:
-  화면에 보이는 본문 → 사이드바 → 스크롤 아래 순서로 번역 도착
+  화면에 보이는 본문 번역 → 한 블록씩 즉시 표시 → 다음 블록 진행
+
+주의:
+  main-content 판별은 순수 우선순위 힌트다. 감지된 블록을 버리지 않으며,
+  임의 사이트에서 언어학적 paragraph 경계를 보장하지 않는다.
+
+감지 단계에서는 heading을 제외하고 문장부호 없는 5단어 이하 블록을 건너뛴다.
+byline/date/read-time/credit처럼 메타데이터로 보이는 조상 안에서는 12단어까지
+같은 규칙을 적용해 짧은 부수 텍스트가 모델 요청이 되지 않게 한다.
+
+로컬 SLM 입력은 감지기가 만든 plain text만 전달한다. 출력은 모든 모델에서
+plain text로 유지하되, TranslateGemma는 번역 전용 professional-translator 지시와
+`<end_of_turn>` EOS를 사용하고 Hy-MT2는 짧은 output-only 지시를 사용한다.
+native host는 정상 stop으로 끝난 결과만 반환하고, `translation-response.ts`가
+결정적으로 검증·보정한 결과만 페이지와 캐시에 반영한다.
 ```

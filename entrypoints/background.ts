@@ -14,8 +14,15 @@ import {
 import { migrateStorage } from '@/utils/storage';
 import { DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, LANG_STORAGE_KEY } from '@/utils/constants';
 import { SELECTED_MODEL_KEY, resolveSelectedModel } from '@/utils/models';
-import { buildTranslationCachePrefix } from '@/utils/translation-context';
+import {
+  buildTranslationCachePrefix,
+  buildTranslationContext,
+  TRANSLATION_CONTEXT_VERSION,
+  type TranslationContext,
+} from '@/utils/translation-context';
 import type { TranslationRequestMode } from '@/utils/translation-types';
+import { interpretTranslationResponse } from '@/utils/translation-response';
+import { NativeTranslationError } from '@/utils/engines/local-mlx';
 
 // Native MLX generation is intentionally single-file: a host owns one resident
 // model and every extension request is ordered through this queue. This avoids
@@ -39,6 +46,10 @@ export default defineBackground(() => {
       chrome.action.openPopup().catch(() => undefined);
       return false;
     }
+    if (message.type === 'GET_TRANSLATION_CONTEXT') {
+      resolvePageContext().then(sendResponse, () => sendResponse(undefined));
+      return true;
+    }
     if (message.type === 'CLEAR_CACHE') {
       clearCache().then(
         () => sendResponse({ success: true }),
@@ -47,8 +58,9 @@ export default defineBackground(() => {
       return true;
     }
     if (message.type === 'CACHE_LOOKUP') {
-      handleCacheLookup(message.paragraphs, message.targetLang).then(sendResponse, () =>
-        sendResponse({ translations: [] }),
+      handleCacheLookup(message.paragraphs, message.targetLang, message.context).then(
+        sendResponse,
+        () => sendResponse({ translations: [] }),
       );
       return true;
     }
@@ -60,14 +72,17 @@ export default defineBackground(() => {
           message.subtitleContext,
           message.sourceLang,
           message.targetLang,
+          message.context,
         ),
-      ).then(sendResponse, (error) =>
+      ).then(sendResponse, (error) => {
+        const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
         sendResponse({
           translations: [],
           error: error instanceof Error ? error.message : String(error),
-          localHostError: true,
-        }),
-      );
+          errorCode: code,
+          localHostError: !['invalid_output', 'input_too_long'].includes(code),
+        });
+      });
       return true;
     }
     return false;
@@ -80,20 +95,40 @@ async function resolveTargetLang(messageTargetLang?: string): Promise<string> {
   return (data[LANG_STORAGE_KEY] as { target?: string } | undefined)?.target || DEFAULT_TARGET_LANG;
 }
 
+async function resolveSourceLang(): Promise<string> {
+  const data = await chrome.storage.local.get(LANG_STORAGE_KEY);
+  return (data[LANG_STORAGE_KEY] as { source?: string } | undefined)?.source || DEFAULT_SOURCE_LANG;
+}
+
 async function selectedModel(): Promise<ReturnType<typeof resolveSelectedModel>> {
   const data = await chrome.storage.local.get(SELECTED_MODEL_KEY);
   return resolveSelectedModel(data[SELECTED_MODEL_KEY] as string | undefined);
 }
 
+async function resolvePageContext(): Promise<TranslationContext> {
+  const [sourceLang, targetLang, modelId] = await Promise.all([
+    resolveSourceLang(),
+    resolveTargetLang(),
+    selectedModel(),
+  ]);
+  return buildTranslationContext(sourceLang, targetLang, 'page', modelId);
+}
+
 async function handleCacheLookup(
   paragraphs: { id: string; text: string }[],
   target?: string,
+  context?: TranslationContext,
 ): Promise<CacheLookupResponse> {
   await loadCache();
+  const effectiveContext = isValidPageContext(context) ? context : await resolvePageContext();
+  const effectiveTarget = isValidPageContext(context)
+    ? effectiveContext.targetLang
+    : (target ?? effectiveContext.targetLang);
   const prefix = buildTranslationCachePrefix(
-    await resolveTargetLang(target),
+    effectiveContext.sourceLang,
+    effectiveTarget,
     'page',
-    await selectedModel(),
+    effectiveContext.modelId,
   );
   return {
     translations: paragraphs.flatMap((paragraph) => {
@@ -109,11 +144,14 @@ async function handleTranslateBatch(
   subtitleContext: { original: string; translated: string }[] | undefined,
   sourceLang: string | undefined,
   targetLang: string | undefined,
+  context?: TranslationContext,
 ): Promise<TranslateBatchResponse> {
-  const modelId = await selectedModel();
-  const effectiveTarget = await resolveTargetLang(targetLang);
   const effectiveMode = mode ?? 'page';
-  const lang = { sourceLang: sourceLang || DEFAULT_SOURCE_LANG, targetLang: effectiveTarget };
+  const pageContext = effectiveMode === 'page' && isValidPageContext(context) ? context : null;
+  const modelId = pageContext?.modelId ?? (await selectedModel());
+  const effectiveTarget = pageContext?.targetLang ?? (await resolveTargetLang(targetLang));
+  const effectiveSource = pageContext?.sourceLang ?? sourceLang ?? DEFAULT_SOURCE_LANG;
+  const lang = { sourceLang: effectiveSource, targetLang: effectiveTarget };
 
   // Segment output includes positional context and is intentionally not shared
   // through the page cache; every other mode preserves the established cache.
@@ -122,7 +160,12 @@ async function handleTranslateBatch(
   }
 
   await loadCache();
-  const prefix = buildTranslationCachePrefix(effectiveTarget, effectiveMode, modelId);
+  const prefix = buildTranslationCachePrefix(
+    effectiveSource,
+    effectiveTarget,
+    effectiveMode,
+    modelId,
+  );
   const cached: { id: string; translatedText: string }[] = [];
   const uncached: { id: string; text: string }[] = [];
   for (const paragraph of paragraphs) {
@@ -139,10 +182,38 @@ async function handleTranslateBatch(
     lang,
     modelId,
   );
+  const acceptedTranslations: { id: string; translatedText: string }[] = [];
+  const invalidOutputs: { id: string; reason: string }[] = [];
   for (const translated of result.translations) {
     const original = uncached.find((paragraph) => paragraph.id === translated.id);
-    if (original) setCached(prefix + original.text, translated.translatedText);
+    if (!original) continue;
+    const interpreted = interpretTranslationResponse(
+      original.text,
+      translated.translatedText,
+      effectiveTarget,
+      modelId,
+    );
+    if (!interpreted.accepted) {
+      invalidOutputs.push({ id: translated.id, reason: interpreted.reason });
+      continue;
+    }
+    const normalized = { id: translated.id, translatedText: interpreted.text };
+    acceptedTranslations.push(normalized);
+    setCached(prefix + original.text, normalized.translatedText);
   }
   void persistCache();
-  return { translations: [...cached, ...result.translations] };
+  return { translations: [...cached, ...acceptedTranslations], invalidOutputs };
+}
+
+function isValidPageContext(
+  context: TranslationContext | undefined,
+): context is TranslationContext {
+  if (!context || context.version !== TRANSLATION_CONTEXT_VERSION || context.mode !== 'page') {
+    return false;
+  }
+  return (
+    context.fingerprint ===
+    buildTranslationContext(context.sourceLang, context.targetLang, context.mode, context.modelId)
+      .fingerprint
+  );
 }

@@ -1,11 +1,12 @@
 /** Logged at content-script startup so stale bundles are identifiable. */
 export const BUILD_TAG = '0.6.0-local-mlx';
 
-export const BATCH_SIZE = 15;
-export const VIEWPORT_BATCH_SIZE = 5;
-// The native host serializes generation and retains only one resident model.
-// Keep DOM workers bounded; requests are queued by the service worker.
-export const PIPELINE_CONCURRENCY = 2;
+// Page translation is deliberately one detected block per native request.
+// The local host runs one resident SLM and serializes generation; larger page
+// batches only delay the first visible result and couple failures together.
+export const BATCH_SIZE = 1;
+export const VIEWPORT_BATCH_SIZE = 1;
+export const PIPELINE_CONCURRENCY = 1;
 export const MAX_TEXT_LENGTH = 5000;
 export const DEBOUNCE_DELAY = 500;
 export const MAX_RETRIES = 3;

@@ -216,7 +216,11 @@ Circuit breaker 발동!
 
 ### 4. Generation Counter — translateGen (translator.ts)
 
-**목적**: 취소된 배치가 DOM에 번역을 주입하는 것 방지
+**목적**: 취소된 단일 블록 요청이 DOM에 번역을 주입하는 것 방지
+
+원문 `characterData` 변경은 observer가 `added` 재감지로 전달하며, 진행 중인
+단일 블록 응답은 generation/source/ID를 다시 확인한 뒤에만 주입한다. 번역 및
+로더 소유 텍스트 변경은 observer에서 무시한다.
 
 ```
 cancelTranslation() 호출
@@ -224,7 +228,7 @@ cancelTranslation() 호출
   ├─ translateGen++            ← 세대 증가
   ├─ cleanupLoaders()          ← DOM 로딩 표시 즉시 제거
   │
-  │  이후 이전 배치의 processBatch() 결과 도착:
+  │  이후 이전 블록의 processBlock() 결과 도착:
   │  ├─ gen(이전) !== translateGen(현재)
   │  └─ DOM 주입 안 함 → return
   │

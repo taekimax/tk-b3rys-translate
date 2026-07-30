@@ -7,6 +7,9 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 let loaded = false;
+let dirtyVersion = 0;
+let writtenVersion = 0;
+let persistPromise: Promise<void> | null = null;
 
 export async function loadCache(): Promise<void> {
   if (loaded) return;
@@ -50,8 +53,12 @@ export function setCached(text: string, translatedText: string): void {
 }
 
 export async function clearCache(): Promise<void> {
+  const pending = persistPromise;
+  if (pending) await pending;
   cache.clear();
   loaded = false;
+  dirtyVersion = 0;
+  writtenVersion = 0;
   try {
     await chrome.storage.local.remove(CACHE_STORAGE_KEY);
   } catch {
@@ -59,11 +66,31 @@ export async function clearCache(): Promise<void> {
   }
 }
 
-export async function persistCache(): Promise<void> {
+/** Request one serialized, trailing flush of the current cache snapshot. */
+export function requestPersistCache(): void {
+  dirtyVersion++;
+  if (!persistPromise) persistPromise = flushCache();
+}
+
+async function flushCache(): Promise<void> {
   try {
-    const entries = Array.from(cache.entries());
-    await chrome.storage.local.set({ [CACHE_STORAGE_KEY]: entries });
-  } catch {
-    // Storage unavailable — skip persistence
+    while (writtenVersion < dirtyVersion) {
+      const version = dirtyVersion;
+      const entries = Array.from(cache.entries());
+      try {
+        await chrome.storage.local.set({ [CACHE_STORAGE_KEY]: entries });
+        writtenVersion = version;
+      } catch {
+        // Storage unavailable — leave the version dirty for a later request.
+        return;
+      }
+    }
+  } finally {
+    persistPromise = null;
   }
+}
+
+export async function persistCache(): Promise<void> {
+  requestPersistCache();
+  if (persistPromise) await persistPromise;
 }

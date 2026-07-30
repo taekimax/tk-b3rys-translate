@@ -285,12 +285,18 @@ function rejectIfSkippable(el: HTMLElement): number | null {
 // ============================================================
 // Shared: Text content filter pipeline
 // ============================================================
-// "Translate everything by default, skip only with explicit rules."
+// "Translate useful content by default, skip low-information UI chrome."
 // Returns true → skip (don't translate).
 
 function shouldSkipText(el: HTMLElement, text: string, phase: 1 | 2): boolean {
   // Too short — single characters (e.g. "X", "·")
   if (text.length < 2) return true;
+
+  // Small labels and metadata do not benefit from a model call. Keep headings
+  // and sentence-like fragments, but skip terse non-sentence blocks globally.
+  // Metadata gets a wider allowance so bylines, dates, read-time controls, and
+  // image credits do not leak through just because a timestamp has six words.
+  if (isShortNonSentenceBlock(el, text)) return true;
 
   // [F1] URL text — bare URLs ("youtube.com/...", "https://...")
   if (isUrlLike(text)) return true;
@@ -331,6 +337,53 @@ const HEADER_NAV_SELECTOR = [
   '[role="banner"] nav',
   '[role="banner"] [role="navigation"]',
 ].join(',');
+
+const SHORT_BLOCK_MAX_WORDS = 5;
+const METADATA_SHORT_BLOCK_MAX_WORDS = 12;
+const METADATA_CLASS_PATTERN =
+  /(?:byline|author|authored|timestamp|timetag|dateline|publish(?:ed|date)?|metadata|read.?time|credit)/i;
+
+function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function endsLikeSentence(text: string): boolean {
+  return /[.!?。！？](?:["'”’»)\]]+)?\s*$/.test(text.trim());
+}
+
+/**
+ * Skip low-information fragments without trying to infer a site's full schema.
+ * Heading elements remain visible even when their text is short because a
+ * short headline is still meaningful page content.
+ */
+function isShortNonSentenceBlock(el: HTMLElement, text: string): boolean {
+  if (/^H[1-6]$/.test(el.tagName) || endsLikeSentence(text)) return false;
+
+  const count = wordCount(text);
+  if (count <= SHORT_BLOCK_MAX_WORDS) return true;
+  if (count > METADATA_SHORT_BLOCK_MAX_WORDS) return false;
+
+  return isMetadataStructure(el);
+}
+
+/** Best-effort structural hints for metadata, deliberately independent of a site. */
+function isMetadataStructure(el: HTMLElement): boolean {
+  if (
+    el.closest(
+      'time, address, button, [role="button"], [role="toolbar"], [itemprop="author"], ' +
+        '[itemprop="datePublished"], [itemprop="dateModified"], [rel="author"], ' +
+        'a[href*="/author/"], a[href*="/authors/"]',
+    )
+  ) {
+    return true;
+  }
+
+  let node: HTMLElement | null = el;
+  for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+    if (METADATA_CLASS_PATTERN.test(node.className?.toString() ?? '')) return true;
+  }
+  return false;
+}
 
 /**
  * Is this a short label in the site's top menu?
@@ -607,6 +660,17 @@ function getDirectText(el: HTMLElement): string {
     }
   }
   return text;
+}
+
+/**
+ * Re-read the source text using the same boundary rules used by detection.
+ * Phase 1 blocks exclude nested semantic/interactive blocks; Phase 2 and
+ * selector blocks use the element's full text. The translator uses this for
+ * stale-response validation after the site mutates the DOM mid-request.
+ */
+export function getDetectedSourceText(el: HTMLElement): string {
+  const text = TRANSLATABLE_TAGS.has(el.tagName) ? getDirectText(el) : (el.textContent ?? '');
+  return text.trim().replace(/\s+/g, ' ');
 }
 
 /** Selector string for stripping SKIP_TAGS descendants from HTML */

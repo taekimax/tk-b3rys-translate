@@ -26,11 +26,11 @@ detectTextBlocks()
       └── shouldSkipText(phase=2) — 텍스트 필터 [F1-F2, F5]
 ```
 
-**설계 철학: "Translate Everything by Default"**
+**설계 철학: "Translate useful content by default"**
 
-- 기본값은 모든 보이는 텍스트를 번역
+- 기본값은 모든 보이는 텍스트를 번역하되, 짧은 비문장 라벨/메타데이터는 제외
 - 스킵은 명시적 규칙으로만: SKIP_TAGS, site-rule skipSelectors/onlyWithin, URL, 비소스언어, <2자
-- 휴리스틱 필터(짧은 텍스트, 링크 비율 등) 제거 → 일관성 확보
+- 짧은 비문장 필터는 전역 단순 규칙으로 유지하고, 메타데이터 구조에는 조금 넓은 단어 한도를 적용
 
 **Phase 1: 시맨틱 블록 감지**
 
@@ -66,13 +66,14 @@ detectTextBlocks()
 
 "Translate everything" — 최소 필터만 유지:
 
-| 라벨 | Phase | 조건                                        | 설명                                           |
-| ---- | ----- | ------------------------------------------- | ---------------------------------------------- |
-| —    | 1, 2  | `text.length < 2`                           | 단일 문자 (X, ·, I 등)                         |
-| [F1] | 1, 2  | `isUrlLike(text)`                           | URL 텍스트 (youtube.com/... 등)                |
-| [F2] | 1, 2  | `!isLikelySourceLang(text)` (스크립트 비율) | 비소스언어 텍스트 (CJK/Cyrillic/Latin 감지)    |
-| [F5] | 2     | `el.querySelector([BLOCK_ID])` 매칭         | Phase 1이 이미 처리한 자식이 있는 컨테이너     |
-| [F7] | 2     | TreeWalker에서 TABLE → REJECT               | TABLE 내부는 Phase 2 감지 제외 (데이터 테이블) |
+| 라벨  | Phase | 조건                                        | 설명                                                   |
+| ----- | ----- | ------------------------------------------- | ------------------------------------------------------ |
+| [F0]  | 1, 2  | non-heading + non-sentence + ≤5 words       | 짧은 라벨/이름/컨트롤 — heading과 문장형 텍스트는 보존 |
+| [F0m] | 1, 2  | metadata 구조 + non-sentence + ≤12 words    | byline/date/read-time/credit 같은 메타데이터           |
+| [F1]  | 1, 2  | `isUrlLike(text)`                           | URL 텍스트 (youtube.com/... 등)                        |
+| [F2]  | 1, 2  | `!isLikelySourceLang(text)` (스크립트 비율) | 비소스언어 텍스트 (CJK/Cyrillic/Latin 감지)            |
+| [F5]  | 2     | `el.querySelector([BLOCK_ID])` 매칭         | Phase 1이 이미 처리한 자식이 있는 컨테이너             |
+| [F7]  | 2     | TreeWalker에서 TABLE → REJECT               | TABLE 내부는 Phase 2 감지 제외 (데이터 테이블)         |
 
 제거된 필터: [F3] isInsideSkippedAncestor, [F4] isMostlyLinks, [F6] 짧은 TD/TH, [F9] 짧은 텍스트
 
@@ -159,7 +160,7 @@ detectTextBlocks()
 
 **스크롤 보존 (preserveScroll):**
 
-- 번역 주입(`processBatch`) 및 제거(`removeAllTranslations`) 시 스크롤 위치 보존
+- 번역 주입(`processBlock`) 및 제거(`removeAllTranslations`) 시 스크롤 위치 보존
 - viewport 중앙 근처의 non-fixed 센티넬 요소를 찾아 DOM 변형 전후 위치 drift를 측정, `scrollBy`로 보정
 
 **HTML Sanitization:**
@@ -168,20 +169,24 @@ detectTextBlocks()
 - A 태그: href, title만 허용, javascript:/data: 차단
 - style 속성: 안전한 CSS만 허용 (color, text-decoration, font-weight 등)
 
-## 배치 전략 (`runPipeline` — 우선순위 풀 + 워커)
+## 로컬 SLM 페이지 전략 (`runPipeline` — 단일 블록 + 우선순위 풀)
 
 - **Phase 0 — 캐시 선주입** (`injectCachedTranslations`): 배칭 전에 `CACHE_LOOKUP` 메시지(순수 캐시 읽기 — API·rate limit·통계 없음)로 전체 블록을 한 번에 조회, hit은 즉시 주입하고 **miss만** 파이프라인으로. 재방문 페이지가 즉시 렌더되는 이유. lookup 실패는 non-fatal (전량 일반 경로 폴백)
-- **단일 우선순위 풀** (`runPipeline`): 옛 Phase 1a→1b→2 순차 배리어를 폐지. miss 블록을 하나의 `pending` 풀에 넣고 `PIPELINE_CONCURRENCY(=6)` 워커가 앞에서부터 `BATCH_SIZE(=15)`씩 뽑아 처리. 워커는 배치 끝나는 즉시 다음을 뽑음 → 배리어 idle 제거, 풀 saturation 유지
-- **초기 순서**: main-viewport → side-viewport → remaining(거리순). 뷰포트가 먼저 그려짐
-- **스크롤 팔로잉** (핵심): 스크롤 시 throttle(180ms)로 `pending`을 **현재 뷰포트 거리 기준 재정렬** → 사용자가 스크롤한 곳이 다음 배치가 됨(큐가 눈을 따라감). 거리는 블록당 1회만 측정해 Map 캐시 (comparator가 `getBoundingClientRect`를 O(n log n)회 호출하는 것 방지)
-- **동시성 통일**: 옛 뷰포트 무제한(Promise.all→rate limit 버스트 위험) 제거, 전 구간 `PIPELINE_CONCURRENCY`로 bound. 정상 페이지는 총 호출이 rate limit(150/분) 훨씬 아래
+- **단일 우선순위 풀** (`runPipeline`): miss 블록을 하나의 `pending` 풀에 넣고, 매 native 요청 직전에 현재 viewport/main-content 우선순위를 다시 평가한다.
+- **단일 SLM 요청**: 페이지 경로는 한 번에 `TextBlock` 하나만 `TRANSLATE_BATCH`로 보낸다. 현재 native host는 한 모델을 resident로 유지하고 paragraph 배열을 순차 생성하므로, 큰 배열은 tensor batching이 아니다.
+- **점진 주입**: 한 블록의 terminal response가 도착하면 그 블록만 `withScrollCompensation()`으로 즉시 주입하고 다음 블록을 선택한다. `BATCH_SIZE=1`, `PIPELINE_CONCURRENCY=1`은 페이지 경로의 계약을 드러내는 상수다.
+- **로컬 SLM 입력 계약**: 페이지 경로는 detector가 만든 canonical `TextBlock.text`만 native host에 보낸다. 출력 계약은 모든 모델에서 plain text로 유지하되, TranslateGemma는 번역 전용 professional-translator prompt와 `<end_of_turn>` EOS를 사용하고 Hy-MT2는 짧은 output-only prompt를 사용한다. 모델별 차이는 pinned chat/control-token 계약에만 둔다.
+- **출력 안전 경계**: native host는 MLX generation이 정상적인 stop으로 끝난 경우만 결과로 인정한다. token limit cutoff·취소·명백한 JSON/code-fence/HTML wrapper·source echo·Korean 대상의 장문 비-Hangul 결과는 주입·캐시하지 않는다. `translation-response.ts`는 outer whitespace, line endings, exact terminal marker, standalone label line, 구조가 일치하는 literal `\\n`만 결정적으로 보정한다.
+- **plain-text 주입**: local response interpreter를 통과한 결과는 HTML로 재해석하지 않고 escaped text로 주입한다. inline markup parity는 별도 후속 계약 없이는 다시 도입하지 않는다.
+- **main-content 힌트**: visible + main → visible + other → offscreen + main → offscreen + other 순서다. main selector가 없으면 중립 우선순위로 계속 진행하며, 감지 블록을 제외하지 않는다.
+- **취소 경계**: 취소는 DOM generation을 증가시켜 active response를 stale로 무시한다. native host에 hard preemption protocol은 없으므로 현재 한 블록의 계산은 끝날 수 있다.
 - **drift 보정 공용화**: 모든 DOM 변이(로더 in/out·주입·에러·숨김)는 `withScrollCompensation(scroller, mutate)` 하나로 통일. scroller는 배치 요소에서 `getScrollContainer()`로 도출, 앵커는 `findContentAnchor()`가 스크롤러 내부를 탐침 (상세 규칙: safety-rules 스킬의 "스크롤 drift 보정")
-- **reveal-in-place 토글** (translator.ts): FAB off = 번역 DOM을 제거하지 않고 `HIDING_CLASS`(body `b3rys-hiding-translations`)로 숨김만. FAB on 시 ①숨김 클래스 존재 ②숨긴 번역 존재 ③`body.dataset.b3rysLang === 현재 타겟 언어` (done 패스에서 기록) 세 조건이 맞으면 클래스 제거만으로 즉시 복원(보정 포함, 재주입·API 제로). 하나라도 어긋나면 purge 후 재구축. **토글 경로에 물리 제거/재주입을 다시 넣지 말 것** — on/off 지연·미세 스크롤 튐이 재발한다
+- **reveal-in-place 토글** (translator.ts): FAB off = 번역 DOM을 제거하지 않고 `HIDING_CLASS`(body `b3rys-hiding-translations`)로 숨김만. FAB on 시 숨김 번역과 immutable page-context fingerprint가 맞으면 클래스 제거만으로 즉시 복원(보정 포함, 재주입·API 제로). 하나라도 어긋나면 purge 후 재구축. **토글 경로에 물리 제거/재주입을 다시 넣지 말 것** — on/off 지연·미세 스크롤 튐이 재발한다
 
 ## 번역 캐시 (background.ts + translation-cache.ts)
 
 - LRU 캐시, `chrome.storage.local`에 영속 저장
 - TTL: 7일, 최대 4000개 엔트리 (1000은 claude.com급 카드 페이지 하나로 evict — 늘릴 땐 storage.local 5MB 한도 고려)
 - API 호출 전 캐시 조회 → 히트 시 즉시 반환, 미스만 엔진 호출
-- 캐시 키 prefix는 `cacheKeyPrefix(targetLang, mode)` 단일 소스 — `CACHE_LOOKUP`과 `TRANSLATE_BATCH`가 공유 (어긋나면 선주입이 무력화되므로 반드시 이 함수만 사용)
+- 캐시 키 prefix는 source/target/mode/model/context-version을 포함하는 `buildTranslationCachePrefix()` 단일 소스 — `CACHE_LOOKUP`과 `TRANSLATE_BATCH`가 공유 (어긋나면 선주입이 무력화되므로 반드시 이 함수만 사용)
 - 캐시 클리어: 서비스워커 콘솔에서 `chrome.storage.local.remove('b3rys_translation_cache')`

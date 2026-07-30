@@ -50,6 +50,7 @@ Observer는 변경의 **종류**를 판정해 전달한다 (`ContentChangeKind`)
 
 - `added` — 콘텐츠 추가만, 감지된 블록(BLOCK_ID) 무손실
 - `replaced` — 감지된 블록이 제거됨 = 진짜 콘텐츠 교체/SPA 전환 (한 debounce 창에서 replaced가 added에 우선)
+- `characterData` 변경 — 우리 번역/로더 내부가 아닌 원문 텍스트 변경은 `added`로 전달해 진행 중 블록을 재감지한다.
 - 판정 시 자체 정리(TRANSLATED/LOADER 노드 제거)는 replaced로 오인 금지 — BLOCK_ID는 사이트 원본 요소에만 붙음
 
 상태머신 정책:

@@ -1,4 +1,10 @@
 import type { TranslationRequestMode } from './translation-types';
+import type { TranslationContext } from './translation-context';
+
+export interface GetTranslationContextRequest {
+  type: 'GET_TRANSLATION_CONTEXT';
+  mode?: 'page';
+}
 
 export interface TranslateBatchRequest {
   type: 'TRANSLATE_BATCH';
@@ -7,11 +13,14 @@ export interface TranslateBatchRequest {
   subtitleContext?: { original: string; translated: string }[];
   sourceLang?: string;
   targetLang?: string;
+  context?: TranslationContext;
 }
 
 export interface TranslateBatchResponse {
   translations: { id: string; translatedText: string }[];
   error?: string;
+  errorCode?: string;
+  invalidOutputs?: { id: string; reason: string }[];
   localHostError?: boolean;
 }
 
@@ -49,6 +58,7 @@ export interface CacheLookupRequest {
   type: 'CACHE_LOOKUP';
   paragraphs: { id: string; text: string }[];
   targetLang?: string;
+  context?: TranslationContext;
 }
 
 export interface CacheLookupResponse {
@@ -70,6 +80,7 @@ export interface ClearCacheResponse {
 export type BackgroundMessage =
   | TranslateBatchRequest
   | CacheLookupRequest
+  | GetTranslationContextRequest
   | OpenPopupRequest
   | ClearCacheRequest;
 export type ContentMessage =

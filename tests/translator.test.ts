@@ -121,6 +121,18 @@ describe('Inline vs block class', () => {
 // ============================================================
 
 describe('HTML sanitization', () => {
+  it('keeps accepted local output as text even when it resembles markup', () => {
+    setupDOM(
+      '<p>Some long enough paragraph text so it is not inline mode for this test case here.</p>',
+    );
+    const p = document.querySelector('p')!;
+    injectTranslation(p, '가격은 < 5%이고 &amp; 기호를 그대로 보존합니다.', { plainText: true });
+
+    const translated = p.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
+    expect(translated.querySelector('*')).toBeNull();
+    expect(translated.textContent).toBe('가격은 < 5%이고 &amp; 기호를 그대로 보존합니다.');
+  });
+
   it('keeps allowed tags (a, code, strong, em)', () => {
     setupDOM(
       '<p>Some long enough paragraph text so it is not inline mode for this test case here.</p>',

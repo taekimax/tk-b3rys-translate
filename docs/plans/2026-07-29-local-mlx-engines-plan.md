@@ -280,7 +280,8 @@ Use a pinned, structured request and strict response decoder per model family.
 First release:
 
 - Send plain source text to local models, not model-controlled HTML.
-- Return plain translated text and let the existing injection sanitizer run.
+- Return plain translated text, run the deterministic response interpreter, and
+  inject accepted local output as escaped text rather than model-controlled HTML.
 - This intentionally trades formatting in the translated copy for a smaller,
   safer first slice. The original page remains unchanged.
 

@@ -83,14 +83,14 @@ describe('Substack Note single-page (rasbt c-207892753)', () => {
     expect(span.style.overflow).toBe('hidden');
   });
 
-  it('detects all visible text including short UI labels (translate-everything)', () => {
+  it('skips short UI labels while keeping note paragraphs', () => {
     setupDOM(loadFixture('substack-note-single'));
     const blocks = detectTextBlocks(document.body);
     const allText = blocks.map((b) => b.text);
 
-    // "Translate everything" — short UI text is no longer filtered
-    expect(allText.some((t) => t === 'Like')).toBe(true);
-    expect(allText.some((t) => t === 'Reply')).toBe(true);
+    expect(allText.some((t) => t === 'Like')).toBe(false);
+    expect(allText.some((t) => t === 'Reply')).toBe(false);
+    expect(allText.some((t) => t.includes('reinforcement learning'))).toBe(true);
   });
 
   it('inject + removeAll roundtrip is clean', () => {
