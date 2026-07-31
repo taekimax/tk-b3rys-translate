@@ -4,6 +4,7 @@ import {
   translatePage,
   removeAllTranslations,
   cancelTranslation,
+  applyTranslationProgress,
   hasTranslationsOnPage,
   setTranslationMode,
   setTranslationModeWhenAvailable,
@@ -167,6 +168,9 @@ export default defineContentScript({
     chrome.runtime.onMessage.addListener((message: ContentMessage) => {
       if (message.type === 'TOGGLE_TRANSLATION') {
         sm.handleToggle(message.enabled);
+      }
+      if (message.type === 'TRANSLATION_PROGRESS') {
+        applyTranslationProgress(message);
       }
       if (message.type === 'TOGGLE_TRANSLATION_MODE') {
         sm.setMode(message.mode);

@@ -9,6 +9,83 @@ import Tokenizers
 
 private let maximumMessageBytes = 8 * 1024 * 1024
 
+/// Records only operational metadata for failed local translations. Page text
+/// and model output are deliberately excluded: the log exists to distinguish
+/// generation cutoffs from validation failures without retaining browsing
+/// content on disk.
+private enum TranslationDiagnostics {
+  private static let directoryName = "b3rys-translate/diagnostics"
+  private static let fileName = "translation-failures.jsonl"
+  private static let maximumBytes = 256 * 1024
+  private static let lock = NSLock()
+
+  private struct Entry: Encodable {
+    let timestamp: String
+    let modelId: String
+    let reason: String
+    let sourceCharacters: Int
+    let sourceTokens: Int
+    let promptTokens: Int
+    let outputTokenBudget: Int
+    let outputCharacters: Int
+    let outputBytes: Int
+    let stopReason: String
+  }
+
+  static func record(
+    model: LocalModel,
+    reason: String,
+    sourceCharacters: Int,
+    sourceTokens: Int,
+    promptTokens: Int,
+    outputTokenBudget: Int,
+    output: String,
+    stopReason: GenerateStopReason
+  ) {
+    let entry = Entry(
+      timestamp: ISO8601DateFormatter().string(from: Date()),
+      modelId: model.rawValue,
+      reason: reason,
+      sourceCharacters: sourceCharacters,
+      sourceTokens: sourceTokens,
+      promptTokens: promptTokens,
+      outputTokenBudget: outputTokenBudget,
+      outputCharacters: output.count,
+      outputBytes: output.utf8.count,
+      stopReason: String(describing: stopReason)
+    )
+    guard let encoded = try? JSONEncoder().encode(entry) else { return }
+
+    lock.lock()
+    defer { lock.unlock() }
+    do {
+      let root = try FileManager.default.url(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask,
+        appropriateFor: nil,
+        create: true
+      ).appending(path: directoryName, directoryHint: .isDirectory)
+      try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+      let file = root.appending(path: fileName)
+      if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+        size + encoded.count + 1 > maximumBytes {
+        let previous = root.appending(path: "translation-failures.previous.jsonl")
+        try? FileManager.default.removeItem(at: previous)
+        try FileManager.default.moveItem(at: file, to: previous)
+      }
+      if !FileManager.default.fileExists(atPath: file.path) {
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+      }
+      let handle = try FileHandle(forWritingTo: file)
+      try handle.seekToEnd()
+      try handle.write(contentsOf: encoded + Data([0x0A]))
+      try handle.close()
+    } catch {
+      // Diagnostics must never change the translation result.
+    }
+  }
+}
+
 private enum B3rysModelRegistration {
   /// MLX Swift supports the Gemma families directly. Hy-MT2 uses its own
   /// Hunyuan architecture, so register the local implementation before the
@@ -65,6 +142,80 @@ private enum LocalModel: String, Codable, CaseIterable {
     case .translateGemma12B: "f3dcfd54df14672fbcf0731086fb47a797a943ae"
     case .hy18B: "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912"
     case .hy7B: "9b7204bdb161490a8ce49ce607c1310cc3fd03ad"
+    }
+  }
+}
+
+/// A runtime policy is intentionally narrower than a model's advertised
+/// context window: this host runs on a user's Mac alongside Chrome. The output
+/// ceiling is never inferred from source length, though. A translation can be
+/// substantially longer than its source (especially into Korean), and a
+/// source-ratio cap turns an otherwise healthy generation into a false error.
+private struct TranslationGenerationPolicy {
+  enum Decoding {
+    case greedy
+    case sampled(temperature: Float, topP: Float, topK: Int, repetitionPenalty: Float?)
+  }
+
+  let maximumInputTokens: Int
+  let runtimeContextTokens: Int
+  let maximumOutputTokens: Int
+  let decoding: Decoding
+
+  func outputTokenBudget(promptTokenCount: Int) -> Int {
+    // Reserve a small margin for the terminal token and generation machinery.
+    max(1, min(maximumOutputTokens, runtimeContextTokens - promptTokenCount - 16))
+  }
+
+  func parameters(maxTokens: Int) -> GenerateParameters {
+    switch decoding {
+    case .greedy:
+      return GenerateParameters(maxTokens: maxTokens, temperature: 0)
+    case let .sampled(temperature, topP, topK, repetitionPenalty):
+      return GenerateParameters(
+        maxTokens: maxTokens,
+        temperature: temperature,
+        topP: topP,
+        topK: topK,
+        repetitionPenalty: repetitionPenalty
+      )
+    }
+  }
+}
+
+private extension LocalModel {
+  var translationGenerationPolicy: TranslationGenerationPolicy {
+    switch self {
+    case .hy18B, .hy7B:
+      // Tencent's Hy-MT2 1.8B/7B inference guide: temperature 0.7,
+      // top-p 0.6, top-k 20, repetition penalty 1.05, max_tokens 4096.
+      return .init(
+        maximumInputTokens: 4_096,
+        runtimeContextTokens: 8_192,
+        maximumOutputTokens: 4_096,
+        decoding: .sampled(temperature: 0.7, topP: 0.6, topK: 20, repetitionPenalty: 1.05)
+      )
+    case .translateGemma4B, .translateGemma12B:
+      // Google specifies a 2K-token text-input contract and demonstrates
+      // deterministic (`do_sample=False`) translation. Reserve a matching
+      // 2K output window instead of estimating it from source token count.
+      return .init(
+        maximumInputTokens: 2_048,
+        runtimeContextTokens: 4_096,
+        maximumOutputTokens: 2_048,
+        decoding: .greedy
+      )
+    case .gemma4E4B, .gemma4_12B:
+      // Gemma 4's published generation config uses temperature 1.0,
+      // top-p 0.95, and top-k 64. The 16K operational context keeps the
+      // Q4 models responsive on a local machine while preserving a 4K
+      // completion window for translation.
+      return .init(
+        maximumInputTokens: 12_288,
+        runtimeContextTokens: 16_384,
+        maximumOutputTokens: 4_096,
+        decoding: .sampled(temperature: 1.0, topP: 0.95, topK: 64, repetitionPenalty: nil)
+      )
     }
   }
 }
@@ -161,30 +312,60 @@ private final class Engine {
     var results: [Response.Translation] = []
     for item in paragraphs {
       try Task.checkCancellation()
+      let policy = model.translationGenerationPolicy
       let prompt = formattedPromptFor(item: item, request: request, model: model)
       let promptTokenCount = await container.encode(prompt).count
-      guard promptTokenCount <= maximumInputTokens(for: model) else {
+      guard promptTokenCount <= policy.maximumInputTokens else {
         throw HostError.inputTooLong
       }
-      let sourceTokenCount = await container.encode(plainText(item.text)).count
+      let sourceText = plainText(item.text)
+      let sourceTokenCount = await container.encode(sourceText).count
+      let tokenBudget = policy.outputTokenBudget(promptTokenCount: promptTokenCount)
       let generated = try await generate(
         container: container,
         prompt: prompt,
-        maxTokens: outputTokenBudget(
-          sourceTokenCount: sourceTokenCount,
-          promptTokenCount: promptTokenCount,
-          model: model
-        ),
+        maxTokens: tokenBudget,
         model: model
       )
       // A max-token cutoff can look like a valid translation while ending in
       // the middle of a sentence. Never inject or cache such output.
-      guard case .stop = generated.stopReason else { throw HostError.invalidOutput }
+      guard case .stop = generated.stopReason else {
+        TranslationDiagnostics.record(
+          model: model,
+          reason: "non_stop_generation",
+          sourceCharacters: sourceText.count,
+          sourceTokens: sourceTokenCount,
+          promptTokens: promptTokenCount,
+          outputTokenBudget: tokenBudget,
+          output: generated.text,
+          stopReason: generated.stopReason
+        )
+        throw HostError.invalidOutput
+      }
       let text = normalizedTranslation(generated.text, model: model)
-      guard !text.isEmpty,
-        text.utf8.count <= maximumMessageBytes,
-        targetLanguageLooksPlausible(text, target: request.targetLang ?? "ko")
-      else { throw HostError.invalidOutput }
+      let failureReason: String?
+      if text.isEmpty {
+        failureReason = "empty_normalized_output"
+      } else if text.utf8.count > maximumMessageBytes {
+        failureReason = "output_too_large"
+      } else if !targetLanguageLooksPlausible(text, target: request.targetLang ?? "ko") {
+        failureReason = "wrong_target_script"
+      } else {
+        failureReason = nil
+      }
+      if let failureReason {
+        TranslationDiagnostics.record(
+          model: model,
+          reason: failureReason,
+          sourceCharacters: sourceText.count,
+          sourceTokens: sourceTokenCount,
+          promptTokens: promptTokenCount,
+          outputTokenBudget: tokenBudget,
+          output: generated.text,
+          stopReason: generated.stopReason
+        )
+        throw HostError.invalidOutput
+      }
       results.append(.init(id: item.id, translatedText: text))
       Memory.clearCache()
     }
@@ -449,30 +630,6 @@ private final class Engine {
     }
   }
 
-  private func maximumInputTokens(for model: LocalModel) -> Int {
-    switch model {
-    case .translateGemma4B, .translateGemma12B:
-      // TranslateGemma's published translation contract is 2K input tokens.
-      return 2_048
-    default:
-      return 8_192
-    }
-  }
-
-  /// Use tokenizer counts rather than UTF-8 bytes. The source-to-target ratio
-  /// is intentionally generous for Korean and other scripts, while the cap
-  /// remains bounded so a malformed page block cannot reserve unbounded work.
-  private func outputTokenBudget(
-    sourceTokenCount: Int,
-    promptTokenCount: Int,
-    model: LocalModel
-  ) -> Int {
-    let contextLimit = model == .translateGemma4B || model == .translateGemma12B ? 4_096 : 8_192
-    let desired = max(96, min(768, sourceTokenCount * 2 + 64))
-    let available = max(96, contextLimit - promptTokenCount - 16)
-    return min(desired, available)
-  }
-
   private func normalizedTranslation(_ output: String, model: LocalModel) -> String {
     var result = output
       .replacingOccurrences(of: "\r\n", with: "\n")
@@ -553,7 +710,14 @@ private final class Engine {
     // required local-model turn markers and never contact a remote service.
     let input = LMInput(tokens: MLXArray(await container.encode(prompt)))
     return try await container.perform(nonSendable: input) { context, input in
-      let iterator = try TokenIterator(input: input, model: context.model, processor: nil, sampler: ArgMaxSampler(), maxTokens: maxTokens)
+      let parameters = model.translationGenerationPolicy.parameters(maxTokens: maxTokens)
+      let iterator = try TokenIterator(
+        input: input,
+        model: context.model,
+        processor: parameters.processor(),
+        sampler: parameters.sampler(),
+        maxTokens: maxTokens
+      )
       var generationConfiguration = context.configuration
       if model == .translateGemma4B || model == .translateGemma12B {
         // The pinned TranslateGemma bundle declares `<end_of_turn>` in its

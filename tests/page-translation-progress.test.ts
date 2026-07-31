@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TextBlock } from '@/types';
 import {
+  applyTranslationProgress,
   purgeAllTranslations,
   sortBlocksByPagePriority,
   translatePage,
@@ -105,5 +106,93 @@ describe('page translation scheduling', () => {
     await expect(pass).resolves.toBe('done');
     expect(second.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)).not.toBeNull();
     expect(progress).toEqual([1, 2]);
+  });
+
+  it('shows verified partial output, then lets only an invalid block retry', async () => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'One. Two. Three. Four. Five. Six.';
+    document.body.appendChild(paragraph);
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(100));
+
+    const context = buildTranslationContext('en', 'ko', 'page', 'gemma4-e4b-q4');
+    const sendMessage = vi.fn((message: { type: string }) => {
+      if (message.type === 'GET_TRANSLATION_CONTEXT') return Promise.resolve(context);
+      if (message.type === 'CACHE_LOOKUP') return Promise.resolve({ translations: [] });
+      if (message.type === 'TRANSLATE_BATCH') {
+        return Promise.resolve({
+          translations: [],
+          invalidOutputs: [
+            { id: paragraph.getAttribute(DATA_ATTRS.BLOCK_ID), reason: 'source_echo' },
+          ],
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    vi.stubGlobal('chrome', {
+      runtime: { sendMessage },
+      storage: { local: { get: vi.fn(), set: vi.fn() } },
+    });
+
+    const pass = translatePage();
+    await vi.waitFor(() => expect(paragraph.querySelector('.b3rys-error-retry')).not.toBeNull());
+    expect(paragraph.textContent).toContain('원문이 그대로 반환되어');
+
+    (paragraph.querySelector('.b3rys-error-retry') as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(
+        sendMessage.mock.calls.filter(([message]) => message.type === 'TRANSLATE_BATCH'),
+      ).toHaveLength(2),
+    );
+    expect(sendMessage.mock.calls.at(-1)?.[0]).toMatchObject({ priority: 'user' });
+    await expect(pass).resolves.toBe('done');
+  });
+
+  it('renders verified partial output and still accepts the merged final result', async () => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'One. Two. Three. Four. Five. Six.';
+    document.body.appendChild(paragraph);
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(100));
+
+    const context = buildTranslationContext('en', 'ko', 'page', 'gemma4-e4b-q4');
+    let resolveTranslation!: (response: unknown) => void;
+    const sendMessage = vi.fn((message: { type: string }) => {
+      if (message.type === 'GET_TRANSLATION_CONTEXT') return Promise.resolve(context);
+      if (message.type === 'CACHE_LOOKUP') return Promise.resolve({ translations: [] });
+      if (message.type === 'TRANSLATE_BATCH') {
+        return new Promise((resolve) => {
+          resolveTranslation = resolve;
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    vi.stubGlobal('chrome', {
+      runtime: { sendMessage },
+      storage: { local: { get: vi.fn(), set: vi.fn() } },
+    });
+
+    const pass = translatePage();
+    await vi.waitFor(() =>
+      expect(
+        sendMessage.mock.calls.filter(([message]) => message.type === 'TRANSLATE_BATCH'),
+      ).toHaveLength(1),
+    );
+    const blockId = paragraph.getAttribute(DATA_ATTRS.BLOCK_ID)!;
+
+    applyTranslationProgress({
+      blockId,
+      completedChunks: 1,
+      totalChunks: 2,
+      translatedText: '하나. 둘. 셋. 넷. 다섯.',
+    });
+    expect(paragraph.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)?.textContent).toContain(
+      '하나. 둘',
+    );
+    expect(paragraph.querySelector('[data-b3rys-loader-label]')?.textContent).toContain('1/2');
+
+    resolveTranslation({ translations: [{ id: blockId, translatedText: '완성된 번역입니다.' }] });
+    await expect(pass).resolves.toBe('done');
+    expect(paragraph.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)?.textContent).toContain(
+      '완성된 번역입니다.',
+    );
   });
 });

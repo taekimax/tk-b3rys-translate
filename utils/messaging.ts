@@ -42,6 +42,8 @@ export interface GetTranslationContextRequest {
 export interface TranslateBatchRequest {
   type: 'TRANSLATE_BATCH';
   paragraphs: { id: string; text: string }[];
+  /** Explicit reader retry; runs ahead of routine blocks after the active request. */
+  priority?: 'user';
   mode?: TranslationRequestMode;
   subtitleContext?: { original: string; translated: string }[];
   sourceLang?: string;
@@ -55,6 +57,15 @@ export interface TranslateBatchResponse {
   errorCode?: string;
   invalidOutputs?: { id: string; reason: string }[];
   localHostError?: boolean;
+}
+
+/** A verified partial result for a long page block. */
+export interface TranslationProgressMessage {
+  type: 'TRANSLATION_PROGRESS';
+  blockId: string;
+  completedChunks: number;
+  totalChunks: number;
+  translatedText: string;
 }
 
 export interface ToggleTranslationMessage {
@@ -139,4 +150,5 @@ export type ContentMessage =
   | ToggleFloatingButtonMessage
   | ToggleYtButtonMessage
   | ToggleTranslationModeMessage
-  | ToggleAutoTranslateMessage;
+  | ToggleAutoTranslateMessage
+  | TranslationProgressMessage;

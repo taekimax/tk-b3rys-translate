@@ -27,14 +27,23 @@ import type { TranslationRequestMode } from '@/utils/translation-types';
 import { interpretTranslationResponse } from '@/utils/translation-response';
 import { downloadModel, getModelStatus, NativeTranslationError } from '@/utils/engines/local-mlx';
 import { LOCAL_MODEL_DOWNLOAD_STATE_KEY } from '@/utils/messaging';
+import { splitIntoSentenceChunks } from '@/utils/sentence-chunks';
+import { SerialPriorityQueue, type QueuePriority } from '@/utils/serial-priority-queue';
 
 // Native MLX generation is intentionally single-file: a host owns one resident
 // model and every extension request is ordered through this queue. This avoids
 // duplicate model loads and Metal memory spikes from page + selection + YouTube.
-let nativeQueue: Promise<unknown> = Promise.resolve();
-let downloadStateWrite: Promise<void> = Promise.resolve();
+// A reader's explicit retry is the only priority lane; it still never overlaps
+// the request that is currently using the resident model.
+const nativeQueue = new SerialPriorityQueue();
 let downloadManagerReady: Promise<void> = Promise.resolve();
 let processingDownloadQueue = false;
+const downloadStatePublishIntervalMs = 5_000;
+let downloadStatePublishTimer: ReturnType<typeof setTimeout> | undefined;
+let downloadStatePublishing = false;
+let downloadStatePublishQueued = false;
+let downloadStatePublishedAt = 0;
+let downloadStatePublishWaiters: Array<() => void> = [];
 const downloadItems: ModelDownloadItem[] = [];
 const downloadJobs = new Map<
   ModelDownloadItem['modelId'],
@@ -44,31 +53,79 @@ const downloadJobs = new Map<
     reject: (error: Error) => void;
   }
 >();
-function enqueueNative<T>(work: () => Promise<T>): Promise<T> {
-  const result = nativeQueue.then(work, work);
-  nativeQueue = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
+function enqueueNative<T>(work: () => Promise<T>, priority: QueuePriority = 'normal'): Promise<T> {
+  return nativeQueue.enqueue(work, priority);
 }
 
-function publishDownloadQueue(): Promise<void> {
-  const state: ModelDownloadState = {
+function currentDownloadQueueState(): ModelDownloadState {
+  return {
     downloads: downloadItems.map((item) => ({ ...item })),
     updatedAt: Date.now(),
   };
-  downloadStateWrite = downloadStateWrite
-    .then(() => chrome.storage.local.set({ [LOCAL_MODEL_DOWNLOAD_STATE_KEY]: state }))
-    .catch(() => undefined);
-  return downloadStateWrite;
 }
 
-function clearPersistedDownloadQueue(): Promise<void> {
-  downloadStateWrite = downloadStateWrite
-    .then(() => chrome.storage.local.remove(LOCAL_MODEL_DOWNLOAD_STATE_KEY))
-    .catch(() => undefined);
-  return downloadStateWrite;
+function resolveDownloadStatePublishWaiters(waiters: Array<() => void>): void {
+  for (const resolve of waiters) resolve();
+}
+
+function scheduleDownloadQueuePublish(): void {
+  if (downloadStatePublishing || downloadStatePublishTimer !== undefined) return;
+  const delay = Math.max(
+    0,
+    downloadStatePublishIntervalMs - (Date.now() - downloadStatePublishedAt),
+  );
+  downloadStatePublishTimer = setTimeout(() => {
+    downloadStatePublishTimer = undefined;
+    void flushDownloadQueuePublish();
+  }, delay);
+}
+
+async function flushDownloadQueuePublish(): Promise<void> {
+  if (downloadStatePublishing || !downloadStatePublishQueued) return;
+  downloadStatePublishQueued = false;
+  downloadStatePublishing = true;
+  const waiters = downloadStatePublishWaiters;
+  downloadStatePublishWaiters = [];
+  const state: ModelDownloadState = {
+    ...currentDownloadQueueState(),
+  };
+  try {
+    await chrome.storage.local.set({ [LOCAL_MODEL_DOWNLOAD_STATE_KEY]: state });
+  } catch {
+    // The popup treats a missing transient state as inactive and will refresh.
+  } finally {
+    downloadStatePublishedAt = Date.now();
+    downloadStatePublishing = false;
+    resolveDownloadStatePublishWaiters(waiters);
+  }
+  if (downloadStatePublishQueued) scheduleDownloadQueuePublish();
+}
+
+/**
+ * The native downloader can report byte progress every 100ms. Persist only the
+ * newest state at most once every five seconds so Chrome storage never accumulates
+ * an old progress backlog that makes the popup lag behind the actual transfer.
+ */
+function publishDownloadQueue(): Promise<void> {
+  downloadStatePublishQueued = true;
+  const published = new Promise<void>((resolve) => downloadStatePublishWaiters.push(resolve));
+  scheduleDownloadQueuePublish();
+  return published;
+}
+
+async function clearPersistedDownloadQueue(): Promise<void> {
+  if (downloadStatePublishTimer !== undefined) {
+    clearTimeout(downloadStatePublishTimer);
+    downloadStatePublishTimer = undefined;
+  }
+  downloadStatePublishQueued = false;
+  resolveDownloadStatePublishWaiters(downloadStatePublishWaiters);
+  downloadStatePublishWaiters = [];
+  try {
+    await chrome.storage.local.remove(LOCAL_MODEL_DOWNLOAD_STATE_KEY);
+  } catch {
+    // A storage failure must not block the native-host queue.
+  }
 }
 
 function requestModelDownload(modelId: ModelDownloadItem['modelId']): Promise<ModelStatusResponse> {
@@ -143,7 +200,7 @@ export default defineBackground(() => {
   // cannot be rendered as active work by the newly started extension.
   downloadManagerReady = clearPersistedDownloadQueue();
 
-  chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendResponse) => {
     if (message.type === 'OPEN_POPUP') {
       chrome.action.openPopup().catch(() => undefined);
       return false;
@@ -195,15 +252,18 @@ export default defineBackground(() => {
       return true;
     }
     if (message.type === 'TRANSLATE_BATCH') {
-      void enqueueNative(() =>
-        handleTranslateBatch(
-          message.paragraphs,
-          message.mode,
-          message.subtitleContext,
-          message.sourceLang,
-          message.targetLang,
-          message.context,
-        ),
+      void enqueueNative(
+        () =>
+          handleTranslateBatch(
+            message.paragraphs,
+            message.mode,
+            message.subtitleContext,
+            message.sourceLang,
+            message.targetLang,
+            message.context,
+            createProgressReporter(sender),
+          ),
+        message.priority === 'user' ? 'user' : 'normal',
       ).then(sendResponse, (error) => {
         const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
         sendResponse({
@@ -218,6 +278,26 @@ export default defineBackground(() => {
     return false;
   });
 });
+
+function createProgressReporter(
+  sender: chrome.runtime.MessageSender,
+): (progress: {
+  blockId: string;
+  completedChunks: number;
+  totalChunks: number;
+  translatedText: string;
+}) => void {
+  const tabId = sender.tab?.id;
+  const frameId = sender.frameId;
+  if (tabId === undefined) return () => {};
+
+  return (progress) => {
+    if (progress.totalChunks < 2) return;
+    void chrome.tabs
+      .sendMessage(tabId, { type: 'TRANSLATION_PROGRESS', ...progress }, { frameId })
+      .catch(() => {});
+  };
+}
 
 async function resolveTargetLang(messageTargetLang?: string): Promise<string> {
   if (messageTargetLang) return messageTargetLang;
@@ -275,6 +355,12 @@ async function handleTranslateBatch(
   sourceLang: string | undefined,
   targetLang: string | undefined,
   context?: TranslationContext,
+  onProgress?: (progress: {
+    blockId: string;
+    completedChunks: number;
+    totalChunks: number;
+    translatedText: string;
+  }) => void,
 ): Promise<TranslateBatchResponse> {
   const effectiveMode = mode ?? 'page';
   const pageContext = effectiveMode === 'page' && isValidPageContext(context) ? context : null;
@@ -305,34 +391,97 @@ async function handleTranslateBatch(
   }
   if (!uncached.length) return { translations: cached };
 
-  const result = await getEngine().translate(
+  const result = await translateInSentenceChunks(
     uncached,
     effectiveMode,
     subtitleContext,
     lang,
     modelId,
+    effectiveTarget,
+    onProgress,
   );
   const acceptedTranslations: { id: string; translatedText: string }[] = [];
-  const invalidOutputs: { id: string; reason: string }[] = [];
   for (const translated of result.translations) {
-    const original = uncached.find((paragraph) => paragraph.id === translated.id);
-    if (!original) continue;
-    const interpreted = interpretTranslationResponse(
-      original.text,
-      translated.translatedText,
-      effectiveTarget,
-      modelId,
-    );
-    if (!interpreted.accepted) {
-      invalidOutputs.push({ id: translated.id, reason: interpreted.reason });
-      continue;
-    }
-    const normalized = { id: translated.id, translatedText: interpreted.text };
-    acceptedTranslations.push(normalized);
-    setCached(prefix + original.text, normalized.translatedText);
+    const original = uncached.find((paragraph) => paragraph.id === translated.id)!;
+    acceptedTranslations.push(translated);
+    setCached(prefix + original.text, translated.translatedText);
   }
   void persistCache();
-  return { translations: [...cached, ...acceptedTranslations], invalidOutputs };
+  return {
+    translations: [...cached, ...acceptedTranslations],
+    invalidOutputs: result.invalidOutputs,
+  };
+}
+
+async function translateInSentenceChunks(
+  paragraphs: { id: string; text: string }[],
+  mode: TranslationRequestMode,
+  subtitleContext: { original: string; translated: string }[] | undefined,
+  lang: { sourceLang: string; targetLang: string },
+  modelId: ReturnType<typeof resolveSelectedModel>,
+  targetLang: string,
+  onProgress?: (progress: {
+    blockId: string;
+    completedChunks: number;
+    totalChunks: number;
+    translatedText: string;
+  }) => void,
+): Promise<{
+  translations: { id: string; translatedText: string }[];
+  invalidOutputs: { id: string; reason: string }[];
+}> {
+  const translations: { id: string; translatedText: string }[] = [];
+  const invalidOutputs: { id: string; reason: string }[] = [];
+
+  for (const [paragraphIndex, paragraph] of paragraphs.entries()) {
+    const chunks = splitIntoSentenceChunks(paragraph.text);
+    if (!chunks.length) {
+      invalidOutputs.push({ id: paragraph.id, reason: 'empty_input' });
+      continue;
+    }
+
+    const translatedChunks: string[] = [];
+    let invalidReason: string | undefined;
+    for (const [chunkIndex, text] of chunks.entries()) {
+      const chunkId = `__b3rys_chunk_${paragraphIndex}_${chunkIndex}`;
+      const result = await getEngine().translate(
+        [{ id: chunkId, text }],
+        mode,
+        subtitleContext,
+        lang,
+        modelId,
+      );
+      const translated = result.translations.find((item) => item.id === chunkId);
+      if (!translated) {
+        invalidReason = 'missing_output';
+        break;
+      }
+      const interpreted = interpretTranslationResponse(
+        text,
+        translated.translatedText,
+        targetLang,
+        modelId,
+      );
+      if (!interpreted.accepted) {
+        invalidReason = interpreted.reason;
+        break;
+      }
+      translatedChunks.push(interpreted.text);
+      onProgress?.({
+        blockId: paragraph.id,
+        completedChunks: translatedChunks.length,
+        totalChunks: chunks.length,
+        translatedText: translatedChunks.join(' '),
+      });
+    }
+
+    if (invalidReason) {
+      invalidOutputs.push({ id: paragraph.id, reason: invalidReason });
+      continue;
+    }
+    translations.push({ id: paragraph.id, translatedText: translatedChunks.join(' ') });
+  }
+  return { translations, invalidOutputs };
 }
 
 function isValidPageContext(

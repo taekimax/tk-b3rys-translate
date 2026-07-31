@@ -316,6 +316,8 @@ export type TranslationResult = 'done' | 'cancelled' | 'empty';
 
 type BlockOutcome = 'injected' | 'cached' | 'failed' | 'detached' | 'stale' | 'fatal';
 
+const activeBlockTranslations = new Map<string, { block: TextBlock; gen: number }>();
+
 /** Current target language (storage) — fingerprint for reveal-in-place. */
 async function getTargetLang(): Promise<string> {
   try {
@@ -796,6 +798,7 @@ async function processBlock(
   block: TextBlock,
   gen: number,
   context: TranslationContext | null,
+  priority: 'normal' | 'user' = 'normal',
 ): Promise<BlockOutcome> {
   if (gen !== translateGen) return 'stale';
   if (!block.element.isConnected) {
@@ -807,6 +810,7 @@ async function processBlock(
   // intentionally only one live page block and one native generation here.
   const scroller = getScrollContainer(block.element);
   let loader: HTMLElement | null = null;
+  activeBlockTranslations.set(block.id, { block, gen });
   withScrollCompensation(scroller, () => {
     loader = showLoading(block.element);
   }, [block.element]);
@@ -822,31 +826,49 @@ async function processBlock(
       // Keep the local-SLM request plain text. `block.html` is only for
       // rendering the translation back into the page.
       paragraphs: [{ id: block.id, text: block.text }],
+      priority: priority === 'user' ? 'user' : undefined,
       context: context ?? undefined,
     });
 
     if (gen !== translateGen) {
       removeLoader();
+      activeBlockTranslations.delete(block.id);
       return 'stale';
     }
 
     if (response.error) {
       removeLoader();
       if (response.localHostError) {
+        activeBlockTranslations.delete(block.id);
         translateGen++;
         await chrome.storage.local.set({ localHostErrorMessage: response.error });
         chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch(() => {});
         return 'fatal';
       }
-      withScrollCompensation(scroller, () => showError(block.element, response.error!), [
-        block.element,
-      ]);
+      activeBlockTranslations.delete(block.id);
+      withScrollCompensation(
+        scroller,
+        () => showBlockError(block, gen, context, response.error!, response.errorCode),
+        [block.element],
+      );
       return 'failed';
     }
 
     const result = response.translations.find((item) => item.id === block.id);
+    const invalidOutput = response.invalidOutputs?.find((item) => item.id === block.id);
+    if (invalidOutput) {
+      removeLoader();
+      activeBlockTranslations.delete(block.id);
+      withScrollCompensation(
+        scroller,
+        () => showBlockError(block, gen, context, invalidOutputMessage(invalidOutput.reason)),
+        [block.element],
+      );
+      return 'failed';
+    }
     if (!result || !sourceMatchesBlock(block)) {
       removeLoader();
+      activeBlockTranslations.delete(block.id);
       block.element.removeAttribute(DATA_ATTRS.BLOCK_ID);
       return 'stale';
     }
@@ -856,27 +878,86 @@ async function processBlock(
       injectTranslation(block.element, result.translatedText, { plainText: true });
       recordInjection(block.text, Date.now(), isScrollDriven());
     }, [block.element]);
+    activeBlockTranslations.delete(block.id);
     return 'injected';
   } catch (err) {
     if (isContextInvalidated(err)) {
       removeLoader();
+      activeBlockTranslations.delete(block.id);
       translateGen++;
       markContextInvalidated();
       return 'fatal';
     }
     if (gen !== translateGen) {
       removeLoader();
+      activeBlockTranslations.delete(block.id);
       return 'stale';
     }
-    const msg = err instanceof Error ? err.message : 'Translation failed';
+    const msg = err instanceof Error ? err.message : '번역을 완료하지 못했습니다.';
     removeLoader();
-    withScrollCompensation(scroller, () => showError(block.element, msg), [block.element]);
+    activeBlockTranslations.delete(block.id);
+    withScrollCompensation(scroller, () => showBlockError(block, gen, context, msg), [
+      block.element,
+    ]);
     return 'failed';
   }
 }
 
+/** Render a verified partial translation for one long page block. */
+export function applyTranslationProgress(progress: {
+  blockId: string;
+  completedChunks: number;
+  totalChunks: number;
+  translatedText: string;
+}): void {
+  const active = activeBlockTranslations.get(progress.blockId);
+  if (!active || active.gen !== translateGen || !sourceMatchesBlock(active.block)) return;
+
+  const { block } = active;
+  const scroller = getScrollContainer(block.element);
+  withScrollCompensation(scroller, () => {
+    const loader = block.element.querySelector<HTMLElement>('[data-b3rys-loader]');
+    const label = loader?.querySelector<HTMLElement>('[data-b3rys-loader-label]');
+    if (loader && label) {
+      loader.dataset.b3rysProgress = 'true';
+      label.textContent = `긴 문단을 나누어 번역 중 · ${progress.completedChunks}/${progress.totalChunks}`;
+    }
+    injectTranslation(block.element, progress.translatedText, { plainText: true });
+  }, [block.element]);
+}
+
+function invalidOutputMessage(reason: string): string {
+  if (reason === 'wrong_target_script') {
+    return '번역 언어가 맞는지 확인하지 못했습니다.';
+  }
+  if (reason === 'source_echo') {
+    return '원문이 그대로 반환되어 번역으로 표시하지 않았습니다.';
+  }
+  return '모델의 번역 결과를 확인하지 못했습니다.';
+}
+
+function showBlockError(
+  block: TextBlock,
+  gen: number,
+  context: TranslationContext | null,
+  message: string,
+  errorCode?: string,
+): void {
+  const userMessage =
+    errorCode === 'invalid_output'
+      ? invalidOutputMessage(errorCode)
+      : errorCode === 'input_too_long'
+        ? '문단이 너무 길어 번역하지 못했습니다.'
+        : message;
+  showError(block.element, userMessage, () => {
+    if (gen !== translateGen || !sourceMatchesBlock(block)) return;
+    void processBlock(block, gen, context, 'user');
+  });
+}
+
 function cleanupLoaders(): void {
   document.querySelectorAll('[data-b3rys-loader]').forEach((el) => el.remove());
+  activeBlockTranslations.clear();
 }
 
 // --- Translation injection ---
@@ -1388,14 +1469,31 @@ function showLoading(element: HTMLElement): HTMLElement {
   const loader = document.createElement('span');
   loader.className = 'b3rys-loading';
   loader.setAttribute('data-b3rys-loader', 'true');
+  loader.innerHTML =
+    '<span class="b3rys-loading-spinner" aria-hidden="true"></span><span data-b3rys-loader-label></span>';
   element.appendChild(loader);
   return loader;
 }
 
-function showError(element: HTMLElement, message: string): void {
+function showError(element: HTMLElement, message: string, onRetry?: () => void): void {
+  removePriorTranslation(element);
   const errorEl = document.createElement('span');
   errorEl.className = 'b3rys-error';
   errorEl.setAttribute(DATA_ATTRS.TRANSLATED, 'true');
-  errorEl.textContent = `번역 실패: ${message}`;
+  const text = document.createElement('span');
+  text.textContent = `번역을 표시하지 않았습니다. ${message}`;
+  errorEl.appendChild(text);
+  if (onRetry) {
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'b3rys-error-retry';
+    retry.textContent = '이 문단 다시 번역';
+    retry.addEventListener('click', () => {
+      retry.disabled = true;
+      errorEl.remove();
+      onRetry();
+    });
+    errorEl.appendChild(retry);
+  }
   element.appendChild(errorEl);
 }

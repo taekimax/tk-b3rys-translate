@@ -655,8 +655,14 @@ function getDirectText(el: HTMLElement): string {
     if (child.nodeType === Node.TEXT_NODE) {
       text += child.textContent;
     } else if (child.nodeType === Node.ELEMENT_NODE) {
-      if (isTextCollectionBoundary(child as HTMLElement)) continue;
-      text += getDirectText(child as HTMLElement);
+      const childEl = child as HTMLElement;
+      if (
+        childEl.hasAttribute(DATA_ATTRS.TRANSLATED) ||
+        childEl.hasAttribute('data-b3rys-loader') ||
+        isTextCollectionBoundary(childEl)
+      )
+        continue;
+      text += getDirectText(childEl);
     }
   }
   return text;
@@ -669,8 +675,26 @@ function getDirectText(el: HTMLElement): string {
  * stale-response validation after the site mutates the DOM mid-request.
  */
 export function getDetectedSourceText(el: HTMLElement): string {
-  const text = TRANSLATABLE_TAGS.has(el.tagName) ? getDirectText(el) : (el.textContent ?? '');
+  const text = TRANSLATABLE_TAGS.has(el.tagName)
+    ? getDirectText(el)
+    : getTextWithoutTranslations(el);
   return text.trim().replace(/\s+/g, ' ');
+}
+
+/** Read source text without counting b3rys's own provisional/final output. */
+function getTextWithoutTranslations(el: HTMLElement): string {
+  let text = '';
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent;
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      const childEl = child as HTMLElement;
+      if (childEl.hasAttribute(DATA_ATTRS.TRANSLATED) || childEl.hasAttribute('data-b3rys-loader'))
+        continue;
+      text += getTextWithoutTranslations(childEl);
+    }
+  }
+  return text;
 }
 
 /** Selector string for stripping SKIP_TAGS descendants from HTML */

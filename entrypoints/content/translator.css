@@ -40,15 +40,31 @@
 }
 
 .b3rys-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: middle;
+  margin-left: 0.4em;
+}
+
+.b3rys-loading-spinner {
   display: inline-block;
   width: 0.75em;
   height: 0.75em;
-  margin-left: 0.4em;
   border: 1.5px solid rgba(156, 163, 175, 0.3);
   border-top-color: #6b7280;
   border-radius: 50%;
-  vertical-align: middle;
   animation: b3rys-spin 0.7s linear infinite;
+}
+
+.b3rys-loading [data-b3rys-loader-label] {
+  display: none;
+}
+
+.b3rys-loading[data-b3rys-progress='true'] [data-b3rys-loader-label] {
+  display: inline;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  font-size: 0.8em;
 }
 
 @keyframes b3rys-spin {
@@ -66,6 +82,22 @@
   border-left: 1.5px solid #ef4444;
   background: rgba(239, 68, 68, 0.05);
   border-radius: 0 6px 6px 0;
+}
+
+.b3rys-error-retry {
+  margin-left: 0.6em;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0.1em 0.45em;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.b3rys-error-retry:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 /* All translation elements must never be scroll anchors.
