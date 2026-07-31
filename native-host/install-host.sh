@@ -1,11 +1,43 @@
 #!/bin/zsh
 set -euo pipefail
 if [[ $# -ne 1 ]]; then print -u2 'usage: install-host.sh <chrome-extension-id>'; exit 64; fi
+extension_id=$1
+if [[ ! "$extension_id" =~ '^[a-p]{32}$' ]]; then
+  print -u2 'chrome extension ID must contain exactly 32 characters from a-p'
+  exit 64
+fi
 script_dir=${0:A:h}
 build_jobs=${B3RYS_NATIVE_HOST_BUILD_JOBS:-4}
 [[ "$build_jobs" == <-> && "$build_jobs" -gt 0 ]] || { print -u2 'B3RYS_NATIVE_HOST_BUILD_JOBS must be a positive integer'; exit 64; }
-developer_dir=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
+for required_command in swift cmake; do
+  command -v "$required_command" >/dev/null 2>&1 || {
+    print -u2 "Required command not found: $required_command"
+    exit 69
+  }
+done
+if [[ -n "${DEVELOPER_DIR:-}" ]]; then
+  developer_dir=$DEVELOPER_DIR
+elif [[ -d /Applications/Xcode.app/Contents/Developer ]]; then
+  developer_dir=/Applications/Xcode.app/Contents/Developer
+else
+  developer_dir=$(/usr/bin/xcode-select -p 2>/dev/null || true)
+fi
+[[ -n "$developer_dir" && -d "$developer_dir" ]] || {
+  print -u2 'Xcode developer directory not found. Install Xcode or set DEVELOPER_DIR.'
+  exit 69
+}
 export DEVELOPER_DIR="$developer_dir"
+
+if ! metal_tool=$(/usr/bin/xcrun -sdk macosx --find metal 2>/dev/null) \
+  || ! metallib_tool=$(/usr/bin/xcrun -sdk macosx --find metallib 2>/dev/null); then
+  print -u2 'Xcode Metal Toolchain is required to install the local MLX host.'
+  print -u2 'Install it in Xcode Settings > Components, then rerun this command.'
+  exit 69
+fi
+[[ -x "$metal_tool" && -x "$metallib_tool" ]] || {
+  print -u2 'xcrun found an incomplete Metal Toolchain.'
+  exit 69
+}
 
 # MLX statically links its Metal backend, but its kernels live in a separate
 # mlx.metallib file. SwiftPM does not copy that file beside executables, while
@@ -18,12 +50,6 @@ cmlx_dir="$script_dir/.build/checkouts/mlx-swift/Source/Cmlx"
 metallib_build_dir="$script_dir/.build/mlx-metallib"
 metallib="$metallib_build_dir/mlx/backend/metal/kernels/mlx.metallib"
 [[ -d "$cmlx_dir" ]] || { print -u2 'Pinned mlx-swift source is missing after the host build'; exit 65; }
-if ! DEVELOPER_DIR="$developer_dir" /usr/bin/xcrun -sdk macosx --find metal >/dev/null 2>&1 \
-  || ! DEVELOPER_DIR="$developer_dir" /usr/bin/xcrun -sdk macosx --find metallib >/dev/null 2>&1; then
-  print -u2 'Xcode Metal Toolchain is required to install the local MLX host.'
-  print -u2 'Install it in Xcode Settings > Components, then rerun this command.'
-  exit 69
-fi
 if [[ ! -s "$metallib" ]]; then
   cmake -S "$cmlx_dir/mlx" -B "$metallib_build_dir" \
     -DMLX_BUILD_TESTS=OFF \
@@ -36,8 +62,46 @@ if [[ ! -s "$metallib" ]]; then
   cmake --build "$metallib_build_dir" --target mlx-metallib --parallel "$build_jobs"
 fi
 [[ -s "$metallib" ]] || { print -u2 'Could not build mlx.metallib for the local MLX host'; exit 65; }
-cp "$metallib" "$script_dir/.build/release/mlx.metallib"
+
+install_dir="$HOME/Library/Application Support/b3rys-translate/native-host"
+install_host_path="$install_dir/b3rys-local-mlx-host"
+install_metallib_path="$install_dir/mlx.metallib"
+mkdir -p "$install_dir"
+tmp_host=''
+tmp_metallib=''
+
 target_dir="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+manifest_path="$target_dir/com.b3rys.translate.local_mlx.json"
 mkdir -p "$target_dir"
-sed -e "s|__HOST_PATH__|$host_path|" -e "s|__EXTENSION_ID__|$1|" "$script_dir/com.b3rys.translate.local_mlx.json.template" > "$target_dir/com.b3rys.translate.local_mlx.json"
-print "Installed native host manifest for $1"
+tmp_manifest=''
+cleanup() {
+  [[ -n "$tmp_host" && -e "$tmp_host" ]] && rm -f "$tmp_host"
+  [[ -n "$tmp_metallib" && -e "$tmp_metallib" ]] && rm -f "$tmp_metallib"
+  [[ -n "$tmp_manifest" && -e "$tmp_manifest" ]] && rm -f "$tmp_manifest"
+}
+trap cleanup EXIT
+
+# Replace each running artifact by rename, not by copying over its existing
+# inode. Chrome may still have the previous native host open; an in-place copy
+# can leave macOS code-signing state attached to a partially replaced file.
+tmp_host=$(mktemp "$install_dir/.b3rys-local-mlx-host.XXXXXX")
+cp "$host_path" "$tmp_host"
+chmod 755 "$tmp_host"
+mv -f "$tmp_host" "$install_host_path"
+tmp_host=''
+
+tmp_metallib=$(mktemp "$install_dir/.mlx.metallib.XXXXXX")
+cp "$metallib" "$tmp_metallib"
+chmod 644 "$tmp_metallib"
+mv -f "$tmp_metallib" "$install_metallib_path"
+tmp_metallib=''
+
+tmp_manifest=$(mktemp "$target_dir/.com.b3rys.translate.local_mlx.json.XXXXXX")
+sed -e "s|__HOST_PATH__|$install_host_path|" \
+  -e "s|__EXTENSION_ID__|$extension_id|" \
+  "$script_dir/com.b3rys.translate.local_mlx.json.template" > "$tmp_manifest"
+chmod 644 "$tmp_manifest"
+mv -f "$tmp_manifest" "$manifest_path"
+tmp_manifest=''
+print "Installed native host manifest for $extension_id"
+print "Host bundle: $install_dir"

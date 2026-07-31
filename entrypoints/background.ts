@@ -2,6 +2,7 @@ import { getEngine } from '@/utils/engines';
 import type {
   CacheLookupResponse,
   BackgroundMessage,
+  ModelDownloadState,
   TranslateBatchResponse,
 } from '@/utils/messaging';
 import {
@@ -22,12 +23,18 @@ import {
 } from '@/utils/translation-context';
 import type { TranslationRequestMode } from '@/utils/translation-types';
 import { interpretTranslationResponse } from '@/utils/translation-response';
-import { NativeTranslationError } from '@/utils/engines/local-mlx';
+import {
+  getModelStatus,
+  NativeTranslationError,
+  onModelDownloadProgress,
+} from '@/utils/engines/local-mlx';
+import { LOCAL_MODEL_DOWNLOAD_STATE_KEY } from '@/utils/messaging';
 
 // Native MLX generation is intentionally single-file: a host owns one resident
 // model and every extension request is ordered through this queue. This avoids
 // duplicate model loads and Metal memory spikes from page + selection + YouTube.
 let nativeQueue: Promise<unknown> = Promise.resolve();
+let downloadStateQueue: Promise<void> = Promise.resolve();
 function enqueueNative<T>(work: () => Promise<T>): Promise<T> {
   const result = nativeQueue.then(work, work);
   nativeQueue = result.then(
@@ -40,6 +47,11 @@ function enqueueNative<T>(work: () => Promise<T>): Promise<T> {
 export default defineBackground(() => {
   void loadCache();
   void migrateStorage();
+  onModelDownloadProgress((progress: ModelDownloadState) => {
+    downloadStateQueue = downloadStateQueue
+      .then(() => chrome.storage.local.set({ [LOCAL_MODEL_DOWNLOAD_STATE_KEY]: progress }))
+      .catch(() => undefined);
+  });
 
   chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendResponse) => {
     if (message.type === 'OPEN_POPUP') {
@@ -57,6 +69,18 @@ export default defineBackground(() => {
       );
       return true;
     }
+    if (message.type === 'GET_MODEL_STATUS') {
+      getModelStatus().then(
+        (status) => sendResponse({ success: true, ...status }),
+        (error) =>
+          sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            errorCode: error instanceof NativeTranslationError ? error.code : 'runtime_error',
+          }),
+      );
+      return true;
+    }
     if (message.type === 'CACHE_LOOKUP') {
       handleCacheLookup(message.paragraphs, message.targetLang, message.context).then(
         sendResponse,
@@ -65,7 +89,7 @@ export default defineBackground(() => {
       return true;
     }
     if (message.type === 'TRANSLATE_BATCH') {
-      enqueueNative(() =>
+      void enqueueNative(() =>
         handleTranslateBatch(
           message.paragraphs,
           message.mode,
@@ -74,15 +98,21 @@ export default defineBackground(() => {
           message.targetLang,
           message.context,
         ),
-      ).then(sendResponse, (error) => {
-        const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
-        sendResponse({
-          translations: [],
-          error: error instanceof Error ? error.message : String(error),
-          errorCode: code,
-          localHostError: !['invalid_output', 'input_too_long'].includes(code),
+      )
+        .then(sendResponse, (error) => {
+          const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
+          sendResponse({
+            translations: [],
+            error: error instanceof Error ? error.message : String(error),
+            errorCode: code,
+            localHostError: !['invalid_output', 'input_too_long'].includes(code),
+          });
+        })
+        .finally(() => {
+          downloadStateQueue = downloadStateQueue
+            .then(() => chrome.storage.local.remove(LOCAL_MODEL_DOWNLOAD_STATE_KEY))
+            .catch(() => undefined);
         });
-      });
       return true;
     }
     return false;

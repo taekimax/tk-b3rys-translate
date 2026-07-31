@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Hub
 import MLX
 import MLXHuggingFace
 import MLXLLM
@@ -44,6 +45,28 @@ private enum LocalModel: String, Codable, CaseIterable {
     case .hy7B: "hy-mt2-7b-q4/9b7204bdb161490a8ce49ce607c1310cc3fd03ad"
     }
   }
+
+  var repository: String {
+    switch self {
+    case .gemma4E4B: "mlx-community/gemma-4-e4b-it-4bit"
+    case .gemma4_12B: "mlx-community/gemma-4-12B-it-4bit"
+    case .translateGemma4B: "mlx-community/translategemma-4b-it-4bit"
+    case .translateGemma12B: "mlx-community/translategemma-12b-it-4bit"
+    case .hy18B: "mlx-community/Hy-MT2-1.8B-4bit"
+    case .hy7B: "mlx-community/Hy-MT2-7B-4bit"
+    }
+  }
+
+  var revision: String {
+    switch self {
+    case .gemma4E4B: "475b9088d29754a3379866cf5aeb6b41acd313c2"
+    case .gemma4_12B: "73bcf09092aa277861d5a191b989b666f7f32e8f"
+    case .translateGemma4B: "5788ec08c047f3f2e17808101b8d9566ac930d58"
+    case .translateGemma12B: "f3dcfd54df14672fbcf0731086fb47a797a943ae"
+    case .hy18B: "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912"
+    case .hy7B: "9b7204bdb161490a8ce49ce607c1310cc3fd03ad"
+    }
+  }
 }
 
 private struct TranslationItem: Codable { let id: String; let text: String }
@@ -54,24 +77,75 @@ private struct Request: Codable {
   let sourceLang: String?; let targetLang: String?
 }
 private struct ErrorValue: Codable { let code: String; let message: String }
-private struct Response: Codable {
+private struct Response: Codable, Sendable {
   let requestId: String; let translations: [Translation]?; let error: ErrorValue?
-  struct Translation: Codable { let id: String; let translatedText: String }
+  let modelRoot: String?; let models: [ModelStatus]?
+  let event: String?; let download: DownloadProgress?
+  struct Translation: Codable, Sendable { let id: String; let translatedText: String }
+  struct ModelStatus: Codable, Sendable {
+    let id: String; let path: String; let ready: Bool; let missingFiles: [String]
+  }
+  struct DownloadProgress: Codable, Sendable {
+    let modelId: String; let fraction: Double
+  }
+  init(
+    requestId: String,
+    translations: [Translation]?,
+    error: ErrorValue?,
+    modelRoot: String?,
+    models: [ModelStatus]?,
+    event: String? = nil,
+    download: DownloadProgress? = nil
+  ) {
+    self.requestId = requestId
+    self.translations = translations
+    self.error = error
+    self.modelRoot = modelRoot
+    self.models = models
+    self.event = event
+    self.download = download
+  }
+}
+
+private struct PreparedModel {
+  let path: URL
+  let downloaded: Bool
 }
 
 private final class Engine {
   private var resident: (model: LocalModel, path: URL, container: ModelContainer)?
 
-  func translate(_ request: Request) async throws -> [Response.Translation] {
+  func translate(
+    _ request: Request,
+    progressHandler: @Sendable @escaping (Response.DownloadProgress) -> Void
+  ) async throws -> [Response.Translation] {
     guard let model = request.modelId, let paragraphs = request.paragraphs, !paragraphs.isEmpty else { throw HostError.invalidRequest }
-    let root = try modelRoot()
-    let path = try verifiedDirectory(root: root, model: model)
+    let root = modelRoot()
+    let prepared = try await ensureModel(root: root, model: model, progressHandler: progressHandler)
+    let path = prepared.path
     let container: ModelContainer
     if let resident, resident.model == model, resident.path == path { container = resident.container }
     else {
       self.resident = nil
       Memory.clearCache()
-      container = try await LLMModelFactory.shared.loadContainer(from: path, using: #huggingFaceTokenizerLoader())
+      do {
+        container = try await LLMModelFactory.shared.loadContainer(from: path, using: #huggingFaceTokenizerLoader())
+      } catch {
+        if prepared.downloaded {
+          do {
+            try quarantineModel(at: path, root: root, model: model)
+          } catch {
+            // A freshly downloaded model must never remain at the canonical
+            // path after a load failure, otherwise the next request skips the
+            // download and retries the same broken snapshot forever.
+            try? FileManager.default.removeItem(at: path)
+            throw HostError.modelDownloadFailed(
+              "downloaded model failed to load and could not be quarantined: \(error.localizedDescription)"
+            )
+          }
+        }
+        throw error
+      }
       self.resident = (model, path, container)
     }
     var results: [Response.Translation] = []
@@ -107,7 +181,7 @@ private final class Engine {
     return results
   }
 
-  private func modelRoot() throws -> URL {
+  func modelRoot() -> URL {
     if let configured = ProcessInfo.processInfo.environment["B3RYS_MODEL_ROOT"], !configured.isEmpty {
       return URL(filePath: configured, directoryHint: .isDirectory).standardizedFileURL
     }
@@ -118,14 +192,187 @@ private final class Engine {
       if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
       current.deleteLastPathComponent()
     }
-    throw HostError.modelsNotFound
+    return FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/b3rys-translate/models", directoryHint: .isDirectory)
+      .standardizedFileURL
   }
 
-  private func verifiedDirectory(root: URL, model: LocalModel) throws -> URL {
-    let root = root.resolvingSymlinksInPath()
-    let directory = root.appending(path: model.directory, directoryHint: .isDirectory).resolvingSymlinksInPath()
-    guard directory.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: directory.appending(path: "config.json").path), FileManager.default.fileExists(atPath: directory.appending(path: "tokenizer.json").path) else { throw HostError.modelsNotFound }
+  private func missingFiles(at directory: URL) -> [String] {
+    var missingFiles: [String] = []
+    for required in ["config.json", "tokenizer.json"] {
+      if !validJSONFile(at: directory.appending(path: required), in: directory) {
+        missingFiles.append(required)
+      }
+    }
+    let index = directory.appending(path: "model.safetensors.index.json")
+    if pathExistsOrSymlink(at: index) {
+      guard validJSONFile(at: index, in: directory),
+      let data = try? Data(contentsOf: index),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let weightMap = object["weight_map"] as? [String: Any]
+      else {
+        missingFiles.append("model.safetensors.index.json")
+        return missingFiles
+      }
+      let shards = Set(weightMap.values.compactMap { $0 as? String })
+      if shards.isEmpty { missingFiles.append("model.safetensors.index.json") }
+      for shard in shards.sorted() {
+        guard isSafeRelativePath(shard),
+          let shardURL = safeFileURL(at: directory.appending(path: shard), in: directory),
+          isRegularNonEmptyFile(at: shardURL)
+        else {
+          missingFiles.append(shard)
+          continue
+        }
+      }
+    } else if safeFileURL(at: directory.appending(path: "model.safetensors"), in: directory)
+      .map({ !isRegularNonEmptyFile(at: $0) }) ?? true
+    {
+      missingFiles.append("model.safetensors")
+    }
+    return missingFiles
+  }
+
+  private func validJSONFile(at url: URL, in directory: URL) -> Bool {
+    guard let safeURL = safeFileURL(at: url, in: directory),
+      isRegularNonEmptyFile(at: safeURL),
+      let data = try? Data(contentsOf: safeURL)
+    else { return false }
+    return (try? JSONSerialization.jsonObject(with: data)) != nil
+  }
+
+  private func isRegularNonEmptyFile(at url: URL) -> Bool {
+    var info = stat()
+    guard lstat(url.path, &info) == 0 else { return false }
+    return (info.st_mode & S_IFMT) == S_IFREG && info.st_size > 0
+  }
+
+  private func isContained(_ url: URL, in root: URL) -> Bool {
+    let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
+    let resolvedURL = url.resolvingSymlinksInPath().standardizedFileURL.path
+    return resolvedURL.hasPrefix(resolvedRoot + "/")
+  }
+
+  private func pathExistsOrSymlink(at url: URL) -> Bool {
+    var info = stat()
+    return lstat(url.path, &info) == 0
+  }
+
+  private func isSafeRelativePath(_ path: String) -> Bool {
+    !path.isEmpty && !path.hasPrefix("/") &&
+      !path.split(separator: "/", omittingEmptySubsequences: false).contains("..")
+  }
+
+  private func safeFileURL(at url: URL, in directory: URL) -> URL? {
+    guard isContained(url, in: directory), !isSymbolicLink(at: url) else { return nil }
+    return url
+  }
+
+  private func safeModelDirectory(root: URL, model: LocalModel) -> URL? {
+    let root = root.resolvingSymlinksInPath().standardizedFileURL
+    let directory = root.appending(path: model.directory, directoryHint: .isDirectory)
+    guard directory.standardizedFileURL.path.hasPrefix(root.path + "/"), isContained(directory, in: root) else { return nil }
+    var info = stat()
+    if lstat(directory.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK { return nil }
     return directory
+  }
+
+  private func ensureModel(
+    root: URL,
+    model: LocalModel,
+    progressHandler: @Sendable @escaping (Response.DownloadProgress) -> Void
+  ) async throws -> PreparedModel {
+    let root = root.resolvingSymlinksInPath()
+    guard let destination = safeModelDirectory(root: root, model: model) else { throw HostError.modelsNotFound }
+    if missingFiles(at: destination).isEmpty { return .init(path: destination, downloaded: false) }
+
+    let stagingRoot = root.appending(path: ".downloads", directoryHint: .isDirectory)
+    do {
+      try makeAuxiliaryDirectory(stagingRoot, within: root)
+      let hub = HubApi(downloadBase: stagingRoot, cache: nil, endpoint: "https://huggingface.co")
+      let snapshot = try await hub.snapshot(
+        from: Hub.Repo(id: model.repository),
+        revision: model.revision,
+        matching: ["*.json", "*.jinja", "*.safetensors", "*.txt", "*.model", "*.vocab", "*.merges"]
+      ) { progress in
+        progressHandler(.init(modelId: model.rawValue, fraction: min(max(progress.fractionCompleted, 0), 1)))
+      }
+      let staged = snapshot.resolvingSymlinksInPath()
+      guard isContained(staged, in: stagingRoot), !isSymbolicLink(at: staged), missingFiles(at: staged).isEmpty else {
+        throw HostError.modelDownloadFailed("download completed without all required model files")
+      }
+      try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try promote(staged: staged, to: destination)
+      progressHandler(.init(modelId: model.rawValue, fraction: 1))
+      return .init(path: destination, downloaded: true)
+    } catch let error as HostError {
+      throw error
+    } catch {
+      throw HostError.modelDownloadFailed(error.localizedDescription)
+    }
+  }
+
+  private func isSymbolicLink(at url: URL) -> Bool {
+    var info = stat()
+    return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
+  }
+
+  private func makeAuxiliaryDirectory(_ directory: URL, within root: URL) throws {
+    guard directory.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/"),
+      !isSymbolicLink(at: directory)
+    else { throw HostError.modelDownloadFailed("model storage contains an unsafe auxiliary path") }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    guard isContained(directory, in: root), !isSymbolicLink(at: directory) else {
+      throw HostError.modelDownloadFailed("model storage contains an unsafe auxiliary path")
+    }
+  }
+
+  private func promote(staged: URL, to destination: URL) throws {
+    let fileManager = FileManager.default
+    let parent = destination.deletingLastPathComponent()
+    var backup: URL?
+    if fileManager.fileExists(atPath: destination.path) || isSymbolicLink(at: destination) {
+      let candidate = parent.appending(
+        path: ".\(destination.lastPathComponent).previous-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+      )
+      try fileManager.moveItem(at: destination, to: candidate)
+      backup = candidate
+    }
+    do {
+      try fileManager.moveItem(at: staged, to: destination)
+      if let backup { try? fileManager.removeItem(at: backup) }
+    } catch {
+      if let backup, !fileManager.fileExists(atPath: destination.path) {
+        try? fileManager.moveItem(at: backup, to: destination)
+      }
+      throw error
+    }
+  }
+
+  private func quarantineModel(at path: URL, root: URL, model: LocalModel) throws {
+    guard isContained(path, in: root), !isSymbolicLink(at: path) else {
+      throw HostError.modelDownloadFailed("downloaded model path is unsafe")
+    }
+    let quarantineRoot = root.appending(path: ".invalid-models", directoryHint: .isDirectory)
+    try makeAuxiliaryDirectory(quarantineRoot, within: root)
+    let target = quarantineRoot.appending(
+      path: "\(model.rawValue)-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.moveItem(at: path, to: target)
+  }
+
+  func modelStatuses() -> [Response.ModelStatus] {
+    let root = modelRoot().resolvingSymlinksInPath()
+    return LocalModel.allCases.map { model in
+      let path = root.appending(path: model.directory, directoryHint: .isDirectory)
+      guard let directory = safeModelDirectory(root: root, model: model) else {
+        return .init(id: model.rawValue, path: path.path, ready: false, missingFiles: ["model directory"])
+      }
+      let missingFiles = missingFiles(at: directory)
+      return .init(id: model.rawValue, path: directory.path, ready: missingFiles.isEmpty, missingFiles: missingFiles)
+    }
   }
 
   private func formattedPromptFor(item: TranslationItem, request: Request, model: LocalModel) -> String {
@@ -306,9 +553,45 @@ private final class Engine {
   }
 }
 
-private enum HostError: LocalizedError { case invalidRequest, modelsNotFound, invalidOutput, inputTooLong
-  var code: String { switch self { case .invalidRequest: "invalid_request"; case .modelsNotFound: "models_not_found"; case .invalidOutput: "invalid_output"; case .inputTooLong: "input_too_long" } }
-  var errorDescription: String? { switch self { case .invalidRequest: "Invalid local translation request."; case .modelsNotFound: "One or more required local model files are missing."; case .invalidOutput: "The local model returned an invalid translation."; case .inputTooLong: "The local text block exceeds this model's input limit." } }
+private enum HostError: LocalizedError { case invalidRequest, modelsNotFound, modelDownloadFailed(String), invalidOutput, inputTooLong
+  var code: String { switch self { case .invalidRequest: "invalid_request"; case .modelsNotFound: "models_not_found"; case .modelDownloadFailed: "model_download_failed"; case .invalidOutput: "invalid_output"; case .inputTooLong: "input_too_long" } }
+  var errorDescription: String? { switch self { case .invalidRequest: "Invalid local translation request."; case .modelsNotFound: "One or more required local model files are missing."; case let .modelDownloadFailed(reason): "The selected local model could not be downloaded: \(reason)"; case .invalidOutput: "The local model returned an invalid translation."; case .inputTooLong: "The local text block exceeds this model's input limit." } }
+}
+
+private final class NativeMessageWriter: @unchecked Sendable {
+  private let handle: FileHandle
+  private let lock = NSLock()
+  private var terminal = false
+
+  init(handle: FileHandle) {
+    self.handle = handle
+  }
+
+  func send(_ response: Response, terminal: Bool) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !self.terminal, let data = try? JSONEncoder().encode(response), data.count <= maximumMessageBytes else { return }
+    var length = UInt32(data.count)
+    var frame = Data(bytes: &length, count: 4)
+    frame.append(data)
+    handle.write(frame)
+    if terminal { self.terminal = true }
+  }
+
+  func progress(requestId: String, _ progress: Response.DownloadProgress) {
+    send(
+      Response(
+        requestId: requestId,
+        translations: nil,
+        error: nil,
+        modelRoot: nil,
+        models: nil,
+        event: "model_download_progress",
+        download: progress
+      ),
+      terminal: false
+    )
+  }
 }
 
 @main struct B3rysLocalMLXHost {
@@ -319,16 +602,27 @@ private enum HostError: LocalizedError { case invalidRequest, modelsNotFound, in
     let engine = Engine()
     while let data = readFrame() {
       guard let request = try? JSONDecoder().decode(Request.self, from: data) else { return }
-      if request.type == "shutdown" { write(Response(requestId: request.requestId, translations: [], error: nil), to: protocolOut); return }
-      guard request.type == "translate" else { write(Response(requestId: request.requestId, translations: nil, error: .init(code: "invalid_request", message: "Unknown request.")), to: protocolOut); continue }
-      do { write(Response(requestId: request.requestId, translations: try await engine.translate(request), error: nil), to: protocolOut) }
+      let writer = NativeMessageWriter(handle: protocolOut)
+      if request.type == "shutdown" {
+        writer.send(Response(requestId: request.requestId, translations: [], error: nil, modelRoot: nil, models: nil), terminal: true)
+        return
+      }
+      if request.type == "model_status" {
+        let root = engine.modelRoot().path
+        writer.send(Response(requestId: request.requestId, translations: nil, error: nil, modelRoot: root, models: engine.modelStatuses()), terminal: true)
+        continue
+      }
+      guard request.type == "translate" else { writer.send(Response(requestId: request.requestId, translations: nil, error: .init(code: "invalid_request", message: "Unknown request."), modelRoot: nil, models: nil), terminal: true); continue }
+      let progressHandler: @Sendable (Response.DownloadProgress) -> Void = { progress in
+        writer.progress(requestId: request.requestId, progress)
+      }
+      do { writer.send(Response(requestId: request.requestId, translations: try await engine.translate(request, progressHandler: progressHandler), error: nil, modelRoot: nil, models: nil), terminal: true) }
       catch {
         let hostError = error as? HostError
-        write(Response(requestId: request.requestId, translations: nil, error: .init(code: hostError?.code ?? "runtime_error", message: error.localizedDescription)), to: protocolOut)
+        writer.send(Response(requestId: request.requestId, translations: nil, error: .init(code: hostError?.code ?? "runtime_error", message: error.localizedDescription), modelRoot: nil, models: nil), terminal: true)
       }
     }
   }
 }
 
 private func readFrame() -> Data? { let header = FileHandle.standardInput.readData(ofLength: 4); guard header.count == 4 else { return nil }; let length = header.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }; guard length > 0, length <= maximumMessageBytes else { return nil }; let data = FileHandle.standardInput.readData(ofLength: Int(length)); return data.count == Int(length) ? data : nil }
-private func write(_ response: Response, to handle: FileHandle) { guard let data = try? JSONEncoder().encode(response), data.count <= maximumMessageBytes else { return }; var length = UInt32(data.count); handle.write(Data(bytes: &length, count: 4)); handle.write(data) }

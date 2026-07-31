@@ -1,4 +1,5 @@
-import { MODEL_CATALOG } from '@/utils/models';
+import { getModelConfig, MODEL_CATALOG, type ModelId } from '@/utils/models';
+import type { LocalModelStatus } from '@/utils/messaging';
 
 export function populateModelSelect(select: HTMLSelectElement): void {
   select.replaceChildren();
@@ -24,4 +25,30 @@ export function renderModelInfoTable(container: HTMLElement): void {
   }
   table.appendChild(body);
   container.replaceChildren(table);
+}
+
+export function modelDownloadUrl(modelId: ModelId): string {
+  const model = getModelConfig(modelId);
+  return `https://huggingface.co/${model.repository}/tree/${model.revision}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function modelInstallPath(modelId: ModelId, modelRoot: string): string {
+  const model = getModelConfig(modelId);
+  return `${modelRoot.replace(/\/$/, '')}/${model.id}/${model.revision}`;
+}
+
+export function modelInstallCommand(modelId: ModelId, modelRoot: string): string {
+  const model = getModelConfig(modelId);
+  return `hf download ${model.repository} --revision ${model.revision} --local-dir ${shellQuote(modelInstallPath(modelId, modelRoot))}`;
+}
+
+export function findModelStatus(
+  models: readonly LocalModelStatus[] | undefined,
+  modelId: ModelId,
+): LocalModelStatus | undefined {
+  return models?.find((model) => model.id === modelId);
 }

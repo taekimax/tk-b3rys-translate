@@ -23,8 +23,26 @@
         <label class="label" for="model-select"
           ><span class="label-text">Local model</span
           ><span class="info-tooltip" id="model-tooltip"></span></label
-        ><select id="model-select" class="select"></select
-        ><span id="local-host-status" class="cache-hint"></span>
+        ><select id="model-select" class="select"></select>
+        <div class="model-status-row">
+          <span id="local-host-status" class="cache-hint"></span
+          ><button id="check-models" class="btn-small" type="button">Check</button>
+        </div>
+        <div id="model-install-guide" class="install-guide" hidden>
+          <strong id="model-install-title">Model files are missing</strong>
+          <span id="model-install-path" class="cache-hint"></span>
+          <code id="model-install-command" class="install-command"></code>
+          <div class="install-actions">
+            <button id="copy-model-command" class="btn-small" type="button">Copy command</button>
+            <a id="open-model-page" class="btn-small" target="_blank" rel="noreferrer"
+              >Open model page</a
+            >
+          </div>
+          <span class="cache-hint"
+            >Install the Hugging Face CLI first if needed:
+            <code>python3 -m pip install --user huggingface_hub</code></span
+          >
+        </div>
       </section>
       <section class="section">
         <label class="label" for="target-lang"><span class="label-text">Translate to</span></label

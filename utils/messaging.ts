@@ -1,5 +1,27 @@
 import type { TranslationRequestMode } from './translation-types';
 import type { TranslationContext } from './translation-context';
+import type { ModelId } from './models';
+
+export interface LocalModelStatus {
+  id: ModelId;
+  path: string;
+  ready: boolean;
+  missingFiles: string[];
+}
+
+export interface ModelStatusResponse {
+  modelRoot: string;
+  models: LocalModelStatus[];
+}
+
+export const LOCAL_MODEL_DOWNLOAD_STATE_KEY = 'localModelDownloadState';
+
+export interface ModelDownloadState {
+  requestId: string;
+  modelId: ModelId;
+  fraction: number;
+  updatedAt: number;
+}
 
 export interface GetTranslationContextRequest {
   type: 'GET_TRANSLATION_CONTEXT';
@@ -77,12 +99,17 @@ export interface ClearCacheResponse {
   success: boolean;
 }
 
+export interface GetModelStatusRequest {
+  type: 'GET_MODEL_STATUS';
+}
+
 export type BackgroundMessage =
   | TranslateBatchRequest
   | CacheLookupRequest
   | GetTranslationContextRequest
   | OpenPopupRequest
-  | ClearCacheRequest;
+  | ClearCacheRequest
+  | GetModelStatusRequest;
 export type ContentMessage =
   | ToggleTranslationMessage
   | ToggleFloatingButtonMessage
