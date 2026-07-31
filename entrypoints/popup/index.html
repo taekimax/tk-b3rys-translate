@@ -21,49 +21,64 @@
       <div class="divider"></div>
       <section class="section section-engine">
         <label class="label" for="model-select"
-          ><span class="label-text">Local model</span
+          ><span class="label-text">로컬 모델</span
           ><span class="info-tooltip" id="model-tooltip"></span></label
         ><select id="model-select" class="select"></select>
         <div class="model-status-row">
           <span id="local-host-status" class="cache-hint"></span
-          ><button id="check-models" class="btn-small" type="button">Check</button>
+          ><button id="check-models" class="btn-small" type="button">상태 확인</button>
         </div>
         <div id="model-install-guide" class="install-guide" hidden>
-          <strong id="model-install-title">Model files are missing</strong>
+          <strong id="model-install-title" role="alert">모델을 다운로드할까요?</strong>
           <span id="model-install-path" class="cache-hint"></span>
-          <code id="model-install-command" class="install-command"></code>
           <div class="install-actions">
-            <button id="copy-model-command" class="btn-small" type="button">Copy command</button>
-            <a id="open-model-page" class="btn-small" target="_blank" rel="noreferrer"
-              >Open model page</a
-            >
+            <button id="download-selected-model" class="btn-small" type="button">
+              다운로드 시작
+            </button>
+            <a id="open-model-page" class="btn-small" target="_blank" rel="noreferrer">모델 정보</a>
           </div>
-          <span class="cache-hint"
-            >Install the Hugging Face CLI first if needed:
-            <code>python3 -m pip install --user huggingface_hub</code></span
+          <span class="cache-hint">다운로드가 완료되면 선택한 모델로 바로 번역할 수 있습니다.</span>
+        </div>
+        <div id="model-download-progress" class="download-progress" hidden aria-live="polite">
+          <div class="download-progress-heading">
+            <strong id="model-download-title">모델 다운로드 준비 중</strong>
+            <span id="model-download-percent">준비 중</span>
+          </div>
+          <div
+            id="model-download-track"
+            class="download-progress-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-labelledby="model-download-title"
           >
+            <div id="model-download-bar" class="download-progress-bar"></div>
+          </div>
+          <span id="model-download-detail" class="cache-hint"></span>
+          <span id="model-download-queue" class="cache-hint" hidden></span>
         </div>
       </section>
       <section class="section">
-        <label class="label" for="target-lang"><span class="label-text">Translate to</span></label
+        <label class="label" for="target-lang"><span class="label-text">번역 언어</span></label
         ><select id="target-lang" class="select"></select>
       </section>
       <section class="section">
-        <label class="label"><span class="label-text">Buttons</span></label>
+        <label class="label"><span class="label-text">표시 버튼</span></label>
         <div class="toggle-pair">
-          <label class="toggle-row">Floating <input type="checkbox" id="fab-toggle" /></label
+          <label class="toggle-row">플로팅 <input type="checkbox" id="fab-toggle" /></label
           ><label class="toggle-row">YouTube <input type="checkbox" id="yt-btn-toggle" /></label
-          ><label class="toggle-row">Auto <input type="checkbox" id="auto-toggle" /></label>
+          ><label class="toggle-row">자동 <input type="checkbox" id="auto-toggle" /></label>
         </div>
         <span class="cache-hint"
-          >All inference stays on this Mac. No API key or cloud route is available.</span
+          >번역은 이 Mac에서 처리됩니다. 텍스트는 외부 번역 서비스로 전송되지 않습니다.</span
         >
       </section>
       <div class="divider"></div>
       <section class="section">
         <div class="cache-row">
-          <span class="label-text">Cache</span
-          ><button id="cache-clear" class="btn-cache-clear">Clear</button>
+          <span class="label-text">번역 캐시</span
+          ><button id="cache-clear" class="btn-cache-clear">지우기</button>
         </div>
       </section>
       <footer class="footer">

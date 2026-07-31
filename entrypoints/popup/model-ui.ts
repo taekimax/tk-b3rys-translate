@@ -32,20 +32,6 @@ export function modelDownloadUrl(modelId: ModelId): string {
   return `https://huggingface.co/${model.repository}/tree/${model.revision}`;
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-export function modelInstallPath(modelId: ModelId, modelRoot: string): string {
-  const model = getModelConfig(modelId);
-  return `${modelRoot.replace(/\/$/, '')}/${model.id}/${model.revision}`;
-}
-
-export function modelInstallCommand(modelId: ModelId, modelRoot: string): string {
-  const model = getModelConfig(modelId);
-  return `hf download ${model.repository} --revision ${model.revision} --local-dir ${shellQuote(modelInstallPath(modelId, modelRoot))}`;
-}
-
 export function findModelStatus(
   models: readonly LocalModelStatus[] | undefined,
   modelId: ModelId,

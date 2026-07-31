@@ -124,7 +124,7 @@ npm run build
 
 **4. 로컬 MLX 호스트 설치**
 
-이 저장소는 공개 키를 manifest에 고정해 확장 ID를 모든 컴퓨터에서 동일하게 유지합니다. 모델은 기본적으로 `~/Library/Application Support/b3rys-translate/models/`에 별도로 보관됩니다. 팝업의 **Check** 버튼은 선택한 모델의 실제 파일 상태를 확인하고, 없으면 정확한 설치 경로와 고정 revision 다운로드 명령을 안내합니다.
+이 저장소는 공개 키를 manifest에 고정해 확장 ID를 모든 컴퓨터에서 동일하게 유지합니다. 모델은 기본적으로 `~/Library/Application Support/b3rys-translate/models/`에 별도로 보관됩니다. 팝업의 **Check** 버튼은 선택한 모델의 실제 파일 상태를 확인하고, 없으면 명확한 설치 안내와 자동 다운로드 버튼을 표시합니다.
 
 현재 고정된 확장 ID: `pphoapgbladencjcfiplhhblhdhjahbi`
 
@@ -136,7 +136,7 @@ cd native-host
 
 설치 스크립트가 필요한 Xcode/Metal/CMake 도구를 먼저 확인한 뒤 호스트와 MLX Metal 커널(`mlx.metallib`)을 빌드합니다. 완성된 호스트는 저장소 밖의 안정적인 경로에 복사하고 Chrome native-host manifest를 원자적으로 등록합니다. 처음 실행할 때 Xcode의 **Metal Toolchain** 컴포넌트와 CMake가 필요합니다. 실행 권한 문제가 있는 파일 시스템에서는 `zsh ./install-host.sh <chrome-extension-id>`로 실행할 수 있습니다.
 
-모델은 미리 여섯 개 모두 설치하지 않습니다. 실제로 선택한 모델로 첫 번역을 요청할 때 native host가 고정된 Hugging Face revision을 자동으로 다운로드하고, 완료 후 번역을 계속합니다. 팝업에는 다운로드 진행률이 표시됩니다. 자동 다운로드가 실패하거나 수동으로 준비하려면 선택한 모델의 **Copy command**를 사용할 수 있습니다. Hugging Face CLI가 없다면 먼저 `python3 -m pip install --user huggingface_hub`를 실행합니다. 모델은 로컬에서만 사용되며, 번역 요청은 다운로드한 모델 파일 외부로 전송되지 않습니다.
+모델은 미리 여섯 개 모두 설치하지 않습니다. 팝업에서 아직 없는 모델을 선택하면 **not installed** 안내와 **Download model** 버튼이 표시됩니다. 버튼을 누르면 native host가 고정된 Hugging Face revision을 자동으로 다운로드합니다. Terminal이나 Hugging Face CLI는 필요하지 않으며, 팝업에는 다운로드 진행률이 표시됩니다. 실제 첫 번역 요청에서도 선택한 모델이 없으면 같은 자동 다운로드가 수행됩니다. 모델은 로컬에서만 사용되며, 번역 요청은 다운로드한 모델 파일 외부로 전송되지 않습니다.
 
 manifest의 공개 키는 커밋해도 안전하지만, 선택적인 CRX 서명용 개인 키는 저장소에 넣지 않습니다. 개인 키는 각 개발 컴퓨터의 `~/.config/b3rys-translate/extension-key.pem`에 보관합니다.
 

@@ -16,10 +16,21 @@ export interface ModelStatusResponse {
 
 export const LOCAL_MODEL_DOWNLOAD_STATE_KEY = 'localModelDownloadState';
 
-export interface ModelDownloadState {
+export type ModelDownloadPhase = 'queued' | 'preparing' | 'downloading';
+
+export interface ModelDownloadItem {
   requestId: string;
   modelId: ModelId;
+  phase: ModelDownloadPhase;
   fraction: number;
+  /** Current transfer throughput when the native downloader can measure it. */
+  bytesPerSecond?: number;
+  updatedAt: number;
+}
+
+/** The complete persistent queue shown by the popup. Transfers run one at a time. */
+export interface ModelDownloadState {
+  downloads: ModelDownloadItem[];
   updatedAt: number;
 }
 
@@ -103,13 +114,26 @@ export interface GetModelStatusRequest {
   type: 'GET_MODEL_STATUS';
 }
 
+/** Explicit popup action that downloads exactly one locally selected model. */
+export interface DownloadModelRequest {
+  type: 'DOWNLOAD_MODEL';
+  modelId: ModelId;
+}
+
+export interface DownloadModelResponse extends ModelStatusResponse {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+}
+
 export type BackgroundMessage =
   | TranslateBatchRequest
   | CacheLookupRequest
   | GetTranslationContextRequest
   | OpenPopupRequest
   | ClearCacheRequest
-  | GetModelStatusRequest;
+  | GetModelStatusRequest
+  | DownloadModelRequest;
 export type ContentMessage =
   | ToggleTranslationMessage
   | ToggleFloatingButtonMessage

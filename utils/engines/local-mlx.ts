@@ -1,5 +1,5 @@
 import type { TranslateResult, TranslationEngine } from './types';
-import type { ModelDownloadState, ModelStatusResponse, LocalModelStatus } from '../messaging';
+import type { ModelDownloadItem, ModelStatusResponse, LocalModelStatus } from '../messaging';
 
 const HOST_NAME = 'com.b3rys.translate.local_mlx';
 
@@ -10,7 +10,7 @@ interface NativeTranslationResponse {
   modelRoot?: string;
   models?: LocalModelStatus[];
   event?: string;
-  download?: { modelId: string; fraction: number };
+  download?: { modelId: string; fraction: number; bytesPerSecond?: number | null };
 }
 
 export class NativeTranslationError extends Error {
@@ -29,7 +29,7 @@ const pending = new Map<
   string,
   { resolve: (value: NativeTranslationResponse) => void; reject: (reason: Error) => void }
 >();
-const downloadProgressListeners = new Set<(progress: ModelDownloadState) => void>();
+const downloadProgressListeners = new Set<(progress: ModelDownloadItem) => void>();
 
 function connect(): chrome.runtime.Port {
   if (port) return port;
@@ -40,8 +40,13 @@ function connect(): chrome.runtime.Port {
       for (const listener of downloadProgressListeners) {
         listener({
           requestId: message.requestId,
-          modelId: progress.modelId as ModelDownloadState['modelId'],
+          modelId: progress.modelId as ModelDownloadItem['modelId'],
+          phase: progress.fraction > 0 ? 'downloading' : 'preparing',
           fraction: progress.fraction,
+          bytesPerSecond:
+            typeof progress.bytesPerSecond === 'number' && progress.bytesPerSecond > 0
+              ? progress.bytesPerSecond
+              : undefined,
           updatedAt: Date.now(),
         });
       }
@@ -62,7 +67,7 @@ function connect(): chrome.runtime.Port {
 }
 
 export function onModelDownloadProgress(
-  listener: (progress: ModelDownloadState) => void,
+  listener: (progress: ModelDownloadItem) => void,
 ): () => void {
   downloadProgressListeners.add(listener);
   return () => downloadProgressListeners.delete(listener);
@@ -109,4 +114,28 @@ export async function getModelStatus(): Promise<ModelStatusResponse> {
     throw new NativeTranslationError('invalid_response', 'Local host returned no model status.');
   }
   return { modelRoot: response.modelRoot, models: response.models };
+}
+
+/** Downloads one user-selected model without loading it or translating text. */
+export async function downloadModel(
+  modelId: ModelDownloadItem['modelId'],
+  onStart?: (state: ModelDownloadItem) => Promise<void>,
+  onProgress?: (state: ModelDownloadItem) => void,
+): Promise<ModelStatusResponse> {
+  const requestId = `model-download-${Date.now()}-${++nextRequestId}`;
+  const removeProgressListener = onModelDownloadProgress((progress) => {
+    if (progress.requestId === requestId) onProgress?.(progress);
+  });
+  try {
+    await onStart?.({ requestId, modelId, phase: 'preparing', fraction: 0, updatedAt: Date.now() });
+    const response = await sendNative({ type: 'download_model', requestId, modelId });
+    if (response.error)
+      throw new NativeTranslationError(response.error.code, response.error.message);
+    if (!response.modelRoot || !response.models) {
+      throw new NativeTranslationError('invalid_response', 'Local host returned no model status.');
+    }
+    return { modelRoot: response.modelRoot, models: response.models };
+  } finally {
+    removeProgressListener();
+  }
 }

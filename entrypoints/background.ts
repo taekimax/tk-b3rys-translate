@@ -2,7 +2,9 @@ import { getEngine } from '@/utils/engines';
 import type {
   CacheLookupResponse,
   BackgroundMessage,
+  ModelDownloadItem,
   ModelDownloadState,
+  ModelStatusResponse,
   TranslateBatchResponse,
 } from '@/utils/messaging';
 import {
@@ -23,18 +25,25 @@ import {
 } from '@/utils/translation-context';
 import type { TranslationRequestMode } from '@/utils/translation-types';
 import { interpretTranslationResponse } from '@/utils/translation-response';
-import {
-  getModelStatus,
-  NativeTranslationError,
-  onModelDownloadProgress,
-} from '@/utils/engines/local-mlx';
+import { downloadModel, getModelStatus, NativeTranslationError } from '@/utils/engines/local-mlx';
 import { LOCAL_MODEL_DOWNLOAD_STATE_KEY } from '@/utils/messaging';
 
 // Native MLX generation is intentionally single-file: a host owns one resident
 // model and every extension request is ordered through this queue. This avoids
 // duplicate model loads and Metal memory spikes from page + selection + YouTube.
 let nativeQueue: Promise<unknown> = Promise.resolve();
-let downloadStateQueue: Promise<void> = Promise.resolve();
+let downloadStateWrite: Promise<void> = Promise.resolve();
+let downloadManagerReady: Promise<void> = Promise.resolve();
+let processingDownloadQueue = false;
+const downloadItems: ModelDownloadItem[] = [];
+const downloadJobs = new Map<
+  ModelDownloadItem['modelId'],
+  {
+    promise: Promise<ModelStatusResponse>;
+    resolve: (status: ModelStatusResponse) => void;
+    reject: (error: Error) => void;
+  }
+>();
 function enqueueNative<T>(work: () => Promise<T>): Promise<T> {
   const result = nativeQueue.then(work, work);
   nativeQueue = result.then(
@@ -44,14 +53,95 @@ function enqueueNative<T>(work: () => Promise<T>): Promise<T> {
   return result;
 }
 
+function publishDownloadQueue(): Promise<void> {
+  const state: ModelDownloadState = {
+    downloads: downloadItems.map((item) => ({ ...item })),
+    updatedAt: Date.now(),
+  };
+  downloadStateWrite = downloadStateWrite
+    .then(() => chrome.storage.local.set({ [LOCAL_MODEL_DOWNLOAD_STATE_KEY]: state }))
+    .catch(() => undefined);
+  return downloadStateWrite;
+}
+
+function clearPersistedDownloadQueue(): Promise<void> {
+  downloadStateWrite = downloadStateWrite
+    .then(() => chrome.storage.local.remove(LOCAL_MODEL_DOWNLOAD_STATE_KEY))
+    .catch(() => undefined);
+  return downloadStateWrite;
+}
+
+function requestModelDownload(modelId: ModelDownloadItem['modelId']): Promise<ModelStatusResponse> {
+  const existing = downloadJobs.get(modelId);
+  if (existing) return existing.promise;
+
+  let resolveJob!: (status: ModelStatusResponse) => void;
+  let rejectJob!: (error: Error) => void;
+  const promise = new Promise<ModelStatusResponse>((resolve, reject) => {
+    resolveJob = resolve;
+    rejectJob = reject;
+  });
+  downloadJobs.set(modelId, { promise, resolve: resolveJob, reject: rejectJob });
+  downloadItems.push({
+    requestId: `queued-${Date.now()}-${downloadItems.length + 1}`,
+    modelId,
+    phase: 'queued',
+    fraction: 0,
+    updatedAt: Date.now(),
+  });
+  void publishDownloadQueue();
+  void processDownloadQueue();
+  return promise;
+}
+
+async function processDownloadQueue(): Promise<void> {
+  if (processingDownloadQueue) return;
+  processingDownloadQueue = true;
+  try {
+    while (true) {
+      const item = downloadItems.find((candidate) => candidate.phase === 'queued');
+      if (!item) return;
+      const job = downloadJobs.get(item.modelId);
+      if (!job) {
+        downloadItems.splice(downloadItems.indexOf(item), 1);
+        await publishDownloadQueue();
+        continue;
+      }
+      try {
+        const status = await enqueueNative(() =>
+          downloadModel(
+            item.modelId,
+            async (started) => {
+              Object.assign(item, started);
+              await publishDownloadQueue();
+            },
+            (progress) => {
+              if (progress.requestId !== item.requestId) return;
+              Object.assign(item, progress);
+              void publishDownloadQueue();
+            },
+          ),
+        );
+        job.resolve(status);
+      } catch (error) {
+        job.reject(error instanceof Error ? error : new Error(String(error)));
+      } finally {
+        downloadJobs.delete(item.modelId);
+        downloadItems.splice(downloadItems.indexOf(item), 1);
+        await publishDownloadQueue();
+      }
+    }
+  } finally {
+    processingDownloadQueue = false;
+  }
+}
+
 export default defineBackground(() => {
   void loadCache();
   void migrateStorage();
-  onModelDownloadProgress((progress: ModelDownloadState) => {
-    downloadStateQueue = downloadStateQueue
-      .then(() => chrome.storage.local.set({ [LOCAL_MODEL_DOWNLOAD_STATE_KEY]: progress }))
-      .catch(() => undefined);
-  });
+  // A reload interrupts native messaging. Clear the old transient queue so it
+  // cannot be rendered as active work by the newly started extension.
+  downloadManagerReady = clearPersistedDownloadQueue();
 
   chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendResponse) => {
     if (message.type === 'OPEN_POPUP') {
@@ -81,6 +171,22 @@ export default defineBackground(() => {
       );
       return true;
     }
+    if (message.type === 'DOWNLOAD_MODEL') {
+      void downloadManagerReady
+        .then(() => requestModelDownload(message.modelId))
+        .then(
+          (status) => sendResponse({ success: true, ...status }),
+          (error) => {
+            const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
+            sendResponse({
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+              errorCode: code,
+            });
+          },
+        );
+      return true;
+    }
     if (message.type === 'CACHE_LOOKUP') {
       handleCacheLookup(message.paragraphs, message.targetLang, message.context).then(
         sendResponse,
@@ -98,21 +204,15 @@ export default defineBackground(() => {
           message.targetLang,
           message.context,
         ),
-      )
-        .then(sendResponse, (error) => {
-          const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
-          sendResponse({
-            translations: [],
-            error: error instanceof Error ? error.message : String(error),
-            errorCode: code,
-            localHostError: !['invalid_output', 'input_too_long'].includes(code),
-          });
-        })
-        .finally(() => {
-          downloadStateQueue = downloadStateQueue
-            .then(() => chrome.storage.local.remove(LOCAL_MODEL_DOWNLOAD_STATE_KEY))
-            .catch(() => undefined);
+      ).then(sendResponse, (error) => {
+        const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
+        sendResponse({
+          translations: [],
+          error: error instanceof Error ? error.message : String(error),
+          errorCode: code,
+          localHostError: !['invalid_output', 'input_too_long'].includes(code),
         });
+      });
       return true;
     }
     return false;

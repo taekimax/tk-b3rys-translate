@@ -72,7 +72,7 @@ private enum LocalModel: String, Codable, CaseIterable {
 private struct TranslationItem: Codable { let id: String; let text: String }
 private struct ContextItem: Codable { let original: String; let translated: String }
 private struct Request: Codable {
-  let type: String; let requestId: String; let modelId: LocalModel?
+  let type: String; let requestId: String; let modelId: String?
   let paragraphs: [TranslationItem]?; let mode: String?; let subtitleContext: [ContextItem]?
   let sourceLang: String?; let targetLang: String?
 }
@@ -86,7 +86,13 @@ private struct Response: Codable, Sendable {
     let id: String; let path: String; let ready: Bool; let missingFiles: [String]
   }
   struct DownloadProgress: Codable, Sendable {
-    let modelId: String; let fraction: Double
+    let modelId: String; let fraction: Double; let bytesPerSecond: Double?
+
+    init(modelId: String, fraction: Double, bytesPerSecond: Double? = nil) {
+      self.modelId = modelId
+      self.fraction = fraction
+      self.bytesPerSecond = bytesPerSecond
+    }
   }
   init(
     requestId: String,
@@ -119,7 +125,11 @@ private final class Engine {
     _ request: Request,
     progressHandler: @Sendable @escaping (Response.DownloadProgress) -> Void
   ) async throws -> [Response.Translation] {
-    guard let model = request.modelId, let paragraphs = request.paragraphs, !paragraphs.isEmpty else { throw HostError.invalidRequest }
+    guard let modelId = request.modelId,
+      let model = LocalModel(rawValue: modelId),
+      let paragraphs = request.paragraphs,
+      !paragraphs.isEmpty
+    else { throw HostError.invalidRequest }
     let root = modelRoot()
     let prepared = try await ensureModel(root: root, model: model, progressHandler: progressHandler)
     let path = prepared.path
@@ -179,6 +189,15 @@ private final class Engine {
       Memory.clearCache()
     }
     return results
+  }
+
+  /// Popup-initiated installation fetches and validates one pinned bundle.
+  /// It deliberately does not load MLX or translate text as a side effect.
+  func download(
+    _ model: LocalModel,
+    progressHandler: @Sendable @escaping (Response.DownloadProgress) -> Void
+  ) async throws {
+    _ = try await ensureModel(root: modelRoot(), model: model, progressHandler: progressHandler)
   }
 
   func modelRoot() -> URL {
@@ -294,8 +313,14 @@ private final class Engine {
         from: Hub.Repo(id: model.repository),
         revision: model.revision,
         matching: ["*.json", "*.jinja", "*.safetensors", "*.txt", "*.model", "*.vocab", "*.merges"]
-      ) { progress in
-        progressHandler(.init(modelId: model.rawValue, fraction: min(max(progress.fractionCompleted, 0), 1)))
+      ) { progress, bytesPerSecond in
+        progressHandler(
+          .init(
+            modelId: model.rawValue,
+            fraction: min(max(progress.fractionCompleted, 0), 1),
+            bytesPerSecond: bytesPerSecond
+          )
+        )
       }
       let staged = snapshot.resolvingSymlinksInPath()
       guard isContained(staged, in: stagingRoot), !isSymbolicLink(at: staged), missingFiles(at: staged).isEmpty else {
@@ -610,6 +635,24 @@ private final class NativeMessageWriter: @unchecked Sendable {
       if request.type == "model_status" {
         let root = engine.modelRoot().path
         writer.send(Response(requestId: request.requestId, translations: nil, error: nil, modelRoot: root, models: engine.modelStatuses()), terminal: true)
+        continue
+      }
+      if request.type == "download_model" {
+        guard let modelId = request.modelId, let model = LocalModel(rawValue: modelId) else {
+          writer.send(Response(requestId: request.requestId, translations: nil, error: .init(code: "invalid_request", message: "A local model is required."), modelRoot: nil, models: nil), terminal: true)
+          continue
+        }
+        let progressHandler: @Sendable (Response.DownloadProgress) -> Void = { progress in
+          writer.progress(requestId: request.requestId, progress)
+        }
+        do {
+          try await engine.download(model, progressHandler: progressHandler)
+          let root = engine.modelRoot().path
+          writer.send(Response(requestId: request.requestId, translations: nil, error: nil, modelRoot: root, models: engine.modelStatuses()), terminal: true)
+        } catch {
+          let hostError = error as? HostError
+          writer.send(Response(requestId: request.requestId, translations: nil, error: .init(code: hostError?.code ?? "runtime_error", message: error.localizedDescription), modelRoot: nil, models: nil), terminal: true)
+        }
         continue
       }
       guard request.type == "translate" else { writer.send(Response(requestId: request.requestId, translations: nil, error: .init(code: "invalid_request", message: "Unknown request."), modelRoot: nil, models: nil), terminal: true); continue }
