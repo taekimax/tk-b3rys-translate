@@ -7,7 +7,7 @@
 ## 0. 준비
 
 - [ ] `npm run test && npm run lint && npm run typecheck && npm run build` 전부 통과
-- [ ] `chrome://extensions` 새로고침(↻) 후 콘솔에서 `[b3rys] content script <BUILD_TAG>` 버전 확인 (stale 번들 방지)
+- [ ] `chrome://extensions` 새로고침(↻) 후 콘솔에서 `[web-translate] content script <BUILD_TAG>` 버전 확인 (stale 번들 방지)
 
 ## 1. 핵심 — 웹페이지 번역 (정적 긴 페이지: 영문 위키 등)
 
@@ -35,13 +35,25 @@
 - [ ] anthropic.com/news: 날짜|카테고리|제목 셀 병합 없음
 - [ ] Substack chat: 위로 스크롤 시 현재 화면 번역됨 (알려진 취약 지점)
 
-## 5. 설정/온보딩
+## 5. 설정/모델
 
-- [ ] 키 삭제 후 둥둥이 클릭 → 팝업 + 온보딩 배너(키 발급 링크)
+- [ ] native host 설치 후 현재 Chrome extension ID로 `verify-host.sh` 통과
+- [ ] 기본 모델 Hy-MT2 7B Q4 표시 및 고정 revision 자동 다운로드 확인
+- [ ] TranslateGemma 4B/12B 선택 → 약관 확인 → 고정 revision 자동 다운로드 확인
 - [ ] Auto-translate ON → 페이지 이동 시 자동 번역 / OFF → 수동
-- [ ] COST ⓘ 툴팁, Model ⓘ 가격 툴팁 표시
+- [ ] Model ⓘ 표에 모델 source revision과 라이선스 링크 표시
 
 ## 6. 배포
 
+- [ ] `dist/chrome-mv3`에 LICENSE, NOTICE, THIRD_PARTY_NOTICES.md가 포함됐는지 확인
+- [ ] `npm run package:hy-mt2-7b` 오프라인 모델 번들과 `LICENSE.txt`/약관 notice 확인
+- [ ] `npm run verify:distribution` 통과 (manifest identity, notices, no model weights)
+- [ ] native prebuilt를 배포할 경우 전이 의존성 license/notice bundle과 Metal library provenance를 별도로 검토
+- [ ] `npm run package:standalone:macos`로 Apple Silicon/macOS 14+ 전체 오프라인 DMG 생성
+- [ ] standalone DMG에 expanded extension, prebuilt host, `mlx.metallib`, Swift resource bundles, Hy-MT2 7B, `LICENSES/`, `SHA256SUMS`, `START-HERE.html` 포함
+- [ ] standalone DMG static verifier 통과: stable extension ID, host name, model revision, arm64, no symlinks/private paths, no recipient developer dependencies
+- [ ] 서명되지 않은 DMG를 실제로 다운로드/격리(quarantine)한 뒤 Gatekeeper의 파일 단위 허용 절차를 검증하고 전역 해제 지침이 없는지 확인
+- [ ] 개발 도구가 없는 Apple Silicon/macOS 14+ 환경에서 `Install.command`와 Chrome 수동 **Load unpacked**를 실행하고 Hy-MT2 7B 오프라인 번역 확인
+- [ ] standalone DMG의 SHA-256을 패키지와 분리된 신뢰 채널에 공유하기 전 대상과 범위를 별도로 확인
 - [ ] 위 전부 통과 후에만: 버전 bump → PR/머지 → `npm run zip` → GitHub Release
 - [ ] 웹스토어: 심사 대기 중인 이전 버전에 **알려진 버그가 포함돼 있으면 교체 업로드**

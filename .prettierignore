@@ -2,6 +2,7 @@ dist/
 .output/
 .wxt/
 node_modules/
+.local-models/
 package-lock.json
 # Test fixtures encode exact whitespace semantics (glued-cell detection) — do not reformat
 tests/fixtures/

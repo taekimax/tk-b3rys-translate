@@ -1,5 +1,5 @@
 /* Custom subtitle overlay */
-.b3rys-subtitle-overlay {
+.web-translate-subtitle-overlay {
   position: absolute;
   bottom: 8%;
   left: 0;
@@ -13,7 +13,7 @@
   gap: 2px;
 }
 
-.b3rys-subtitle-line {
+.web-translate-subtitle-line {
   background: rgba(8, 8, 8, 0.75);
   padding: 4px 12px;
   border-radius: 4px;
@@ -26,20 +26,20 @@
   max-width: none;
 }
 
-.b3rys-subtitle-original {
+.web-translate-subtitle-original {
   color: #fff;
 }
 
-.b3rys-subtitle-translated {
+.web-translate-subtitle-translated {
   color: #fde68a;
 }
 
-.b3rys-subtitle-loading {
+.web-translate-subtitle-loading {
   opacity: 0.5;
 }
 
 /* Transient status notice (e.g. original-captions-only) */
-.b3rys-yt-notice {
+.web-translate-yt-notice {
   position: absolute;
   top: 12%;
   left: 50%;
@@ -57,9 +57,9 @@
     sans-serif;
   pointer-events: none;
   white-space: nowrap;
-  animation: b3rys-notice-fade 3.5s ease forwards;
+  animation: web-translate-notice-fade 3.5s ease forwards;
 }
-@keyframes b3rys-notice-fade {
+@keyframes web-translate-notice-fade {
   0% {
     opacity: 0;
   }
@@ -75,7 +75,7 @@
 }
 
 /* YouTube player translate button */
-.b3rys-yt-btn {
+.web-translate-yt-btn {
   all: unset;
   display: inline-flex !important;
   align-items: center;
@@ -99,20 +99,20 @@
     border-color 0.15s,
     background 0.15s;
 }
-.b3rys-yt-btn:hover {
+.web-translate-yt-btn:hover {
   color: #22c55e;
   border-color: #22c55e;
 }
-.b3rys-yt-btn[data-b3rys-state='active'] {
+.web-translate-yt-btn[data-web-translate-state='active'] {
   color: #fff;
   background: #22c55e;
   border-color: #22c55e;
 }
-.b3rys-yt-btn[data-b3rys-state='error'] {
+.web-translate-yt-btn[data-web-translate-state='error'] {
   color: #f87171;
   border-color: #f87171;
 }
-.b3rys-yt-btn[data-b3rys-state='info'] {
+.web-translate-yt-btn[data-web-translate-state='info'] {
   color: rgba(156, 163, 175, 0.9);
   border-color: rgba(156, 163, 175, 0.5);
 }

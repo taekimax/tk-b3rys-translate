@@ -42,7 +42,7 @@ describe('removeAllTranslations (CSS-only hide)', () => {
     // Element is still in DOM (just CSS-hidden)
     expect(document.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)).not.toBeNull();
     // Body has hiding class
-    expect(document.body.classList.contains('b3rys-hiding-translations')).toBe(true);
+    expect(document.body.classList.contains('web-translate-hiding-translations')).toBe(true);
   });
 
   it('does not call scrollBy — zero DOM changes means zero scroll issues', () => {
@@ -79,10 +79,10 @@ describe('purgeAllTranslations (actual DOM cleanup)', () => {
     );
 
     removeAllTranslations(); // CSS hide
-    expect(document.body.classList.contains('b3rys-hiding-translations')).toBe(true);
+    expect(document.body.classList.contains('web-translate-hiding-translations')).toBe(true);
 
     purgeAllTranslations(); // DOM cleanup
-    expect(document.body.classList.contains('b3rys-hiding-translations')).toBe(false);
+    expect(document.body.classList.contains('web-translate-hiding-translations')).toBe(false);
     expect(document.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)).toBeNull();
   });
 });

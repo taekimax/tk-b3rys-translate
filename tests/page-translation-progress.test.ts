@@ -67,7 +67,7 @@ describe('page translation scheduling', () => {
     vi.spyOn(first, 'getBoundingClientRect').mockReturnValue(rect(100));
     vi.spyOn(second, 'getBoundingClientRect').mockReturnValue(rect(180));
 
-    const context = buildTranslationContext('en', 'ko', 'page', 'gemma4-e4b-q4');
+    const context = buildTranslationContext('en', 'ko', 'page', 'translategemma-4b-it-q4');
     const sendMessage = vi.fn();
     const responses: ((response: unknown) => void)[] = [];
     sendMessage.mockImplementation((message: { type: string; paragraphs?: TextBlock[] }) => {
@@ -114,7 +114,7 @@ describe('page translation scheduling', () => {
     document.body.appendChild(paragraph);
     vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(100));
 
-    const context = buildTranslationContext('en', 'ko', 'page', 'gemma4-e4b-q4');
+    const context = buildTranslationContext('en', 'ko', 'page', 'translategemma-4b-it-q4');
     const sendMessage = vi.fn((message: { type: string }) => {
       if (message.type === 'GET_TRANSLATION_CONTEXT') return Promise.resolve(context);
       if (message.type === 'CACHE_LOOKUP') return Promise.resolve({ translations: [] });
@@ -134,10 +134,12 @@ describe('page translation scheduling', () => {
     });
 
     const pass = translatePage();
-    await vi.waitFor(() => expect(paragraph.querySelector('.b3rys-error-retry')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(paragraph.querySelector('.web-translate-error-retry')).not.toBeNull(),
+    );
     expect(paragraph.textContent).toContain('원문이 그대로 반환되어');
 
-    (paragraph.querySelector('.b3rys-error-retry') as HTMLButtonElement).click();
+    (paragraph.querySelector('.web-translate-error-retry') as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(
         sendMessage.mock.calls.filter(([message]) => message.type === 'TRANSLATE_BATCH'),
@@ -153,7 +155,7 @@ describe('page translation scheduling', () => {
     document.body.appendChild(paragraph);
     vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(100));
 
-    const context = buildTranslationContext('en', 'ko', 'page', 'gemma4-e4b-q4');
+    const context = buildTranslationContext('en', 'ko', 'page', 'translategemma-4b-it-q4');
     let resolveTranslation!: (response: unknown) => void;
     const sendMessage = vi.fn((message: { type: string }) => {
       if (message.type === 'GET_TRANSLATION_CONTEXT') return Promise.resolve(context);
@@ -187,7 +189,9 @@ describe('page translation scheduling', () => {
     expect(paragraph.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)?.textContent).toContain(
       '하나. 둘',
     );
-    expect(paragraph.querySelector('[data-b3rys-loader-label]')?.textContent).toContain('1/2');
+    expect(paragraph.querySelector('[data-web-translate-loader-label]')?.textContent).toContain(
+      '1/2',
+    );
 
     resolveTranslation({ translations: [{ id: blockId, translatedText: '완성된 번역입니다.' }] });
     await expect(pass).resolves.toBe('done');

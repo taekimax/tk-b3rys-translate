@@ -8,7 +8,7 @@ import { getVideoId } from '@/utils/youtube-helpers';
 export async function fetchCaptionTracks(): Promise<CaptionTrack[]> {
   const playerResponse = await getPlayerResponse();
   if (!playerResponse) {
-    console.warn('[b3rys] No player response found');
+    console.warn('[web-translate] No player response found');
     return [];
   }
 
@@ -26,7 +26,7 @@ export async function fetchCaptionTracks(): Promise<CaptionTrack[]> {
   });
 
   console.log(
-    `[b3rys] Found ${tracks.length} caption tracks:`,
+    `[web-translate] Found ${tracks.length} caption tracks:`,
     tracks.map((t) => `${t.languageCode}(${t.kind ?? 'manual'})`),
   );
   return tracks;
@@ -63,7 +63,7 @@ export async function pickSourceLanguageTrack(
   // translator auto-detect the source. Prefer manual captions over ASR.
   const fallback = tracks.find((t) => t.kind !== 'asr') ?? tracks[0];
   console.log(
-    `[b3rys] No '${sourceLang}' caption track — falling back to '${fallback.languageCode}' (${fallback.kind ?? 'manual'})`,
+    `[web-translate] No '${sourceLang}' caption track — falling back to '${fallback.languageCode}' (${fallback.kind ?? 'manual'})`,
   );
   return fallback;
 }
@@ -95,7 +95,7 @@ export async function downloadSubtitles(
   track: CaptionTrack,
   videoId: string | null = getVideoId(),
 ): Promise<SubtitleDownload> {
-  console.log('[b3rys] Track:', track.languageCode, track.kind ?? 'manual');
+  console.log('[web-translate] Track:', track.languageCode, track.kind ?? 'manual');
   const query: TrackQuery = { lang: track.languageCode, kind: track.kind };
   const triedUrls = new Set<string>();
 
@@ -104,7 +104,7 @@ export async function downloadSubtitles(
     // 1: an interception of the track itself.
     const hit = findInterceptedTrack(query, videoId);
     if (hit) {
-      console.log(`[b3rys] Using intercepted data: length=${hit.text.length}`);
+      console.log(`[web-translate] Using intercepted data: length=${hit.text.length}`);
       // An unparseable payload must not dead-end the pipeline — drop it and let the
       // remaining strategies run instead of throwing out of downloadSubtitles.
       const cues = tryParse(hit.text);
@@ -117,14 +117,17 @@ export async function downloadSubtitles(
     const tokenized = tokenizedUrlFor(query, videoId);
     if (!tokenized || triedUrls.has(tokenized)) return null;
     triedUrls.add(tokenized);
-    console.log('[b3rys] Re-targeting an intercepted URL to', `${query.lang}/${queryKind(query)}`);
+    console.log(
+      '[web-translate] Re-targeting an intercepted URL to',
+      `${query.lang}/${queryKind(query)}`,
+    );
     try {
       const result = await bridgeFetch(tokenized);
-      console.log(`[b3rys] Re-targeted fetch: length=${result.length}`);
+      console.log(`[web-translate] Re-targeted fetch: length=${result.length}`);
       const cues = result ? tryParse(result) : null;
       if (cues) return { cues, isAsr: isAsrKind(query.kind) };
     } catch (err) {
-      console.warn('[b3rys] Re-targeted fetch failed:', err);
+      console.warn('[web-translate] Re-targeted fetch failed:', err);
     }
     return null;
   };
@@ -135,7 +138,7 @@ export async function downloadSubtitles(
   // Strategy 3: nothing intercepted yet — captions load ~1s after we ask YouTube to
   // turn them on. Wait for ANY payload for this video (not just our language: a
   // different one still carries the token), then retry the strategies above.
-  console.log('[b3rys] Waiting for YouTube timedtext interception...');
+  console.log('[web-translate] Waiting for YouTube timedtext interception...');
   if (await waitForAnyInterception(videoId, 5000)) {
     const afterWait = await fromInterceptions();
     if (afterWait) return afterWait;
@@ -146,13 +149,13 @@ export async function downloadSubtitles(
   const sep = track.baseUrl.includes('?') ? '&' : '?';
   const urls = [track.baseUrl + sep + 'fmt=json3', track.baseUrl];
   for (const url of urls) {
-    console.log('[b3rys] Direct fetch attempt:', url.substring(0, 120));
+    console.log('[web-translate] Direct fetch attempt:', url.substring(0, 120));
     try {
       const result = await bridgeFetch(url);
-      console.log(`[b3rys] Direct fetch response: length=${result.length}`);
+      console.log(`[web-translate] Direct fetch response: length=${result.length}`);
       if (result) return { cues: parseSubtitleResponse(result), isAsr: isAsrKind(track.kind) };
     } catch (err) {
-      console.warn('[b3rys] Direct fetch failed:', err);
+      console.warn('[web-translate] Direct fetch failed:', err);
     }
   }
 
@@ -167,7 +170,7 @@ export async function downloadSubtitles(
  */
 function asDownload(cues: SubtitleCue[], entry: InterceptedTrack): SubtitleDownload {
   const isAsr = isAsrKind(entry.kind);
-  console.log(`[b3rys] Payload kind: ${isAsr ? 'asr' : 'manual'} (lang=${entry.lang})`);
+  console.log(`[web-translate] Payload kind: ${isAsr ? 'asr' : 'manual'} (lang=${entry.lang})`);
   return { cues, isAsr };
 }
 
@@ -326,8 +329,8 @@ function tokenizedUrlFor(query: TrackQuery, videoId: string | null): string | nu
 }
 
 window.addEventListener('message', (e: MessageEvent) => {
-  if (e.data?.type !== '__b3rys_timedtext_intercepted') return;
-  console.log(`[b3rys] Received intercepted timedtext: length=${e.data.text?.length}`);
+  if (e.data?.type !== '__web_translate_timedtext_intercepted') return;
+  console.log(`[web-translate] Received intercepted timedtext: length=${e.data.text?.length}`);
   recordInterceptedTrack(e.data.url ?? '', e.data.text);
 });
 
@@ -347,7 +350,7 @@ function waitForAnyInterception(videoId: string | null, timeout: number): Promis
     }
 
     const handler = (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_timedtext_intercepted') return;
+      if (e.data?.type !== '__web_translate_timedtext_intercepted') return;
       // The module-level listener records first, but re-record defensively so a
       // listener-ordering change can't strand this wait until timeout.
       recordInterceptedTrack(e.data.url ?? '', e.data.text);
@@ -370,14 +373,14 @@ function bridgeFetch(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const requestId = Math.random().toString(36).slice(2);
     const handler = (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_fetch_response') return;
+      if (e.data?.type !== '__web_translate_fetch_response') return;
       if (e.data.requestId !== requestId) return;
       window.removeEventListener('message', handler);
       if (e.data.error) reject(new Error(e.data.error));
       else resolve(e.data.text);
     };
     window.addEventListener('message', handler);
-    window.postMessage({ type: '__b3rys_fetch_request', url, requestId });
+    window.postMessage({ type: '__web_translate_fetch_request', url, requestId });
     setTimeout(() => {
       window.removeEventListener('message', handler);
       reject(new Error('Bridge fetch timeout'));
@@ -397,7 +400,7 @@ async function getPlayerResponse(): Promise<Record<string, unknown> | null> {
   const fromBridge = await getPlayerResponseFromBridge();
   if (fromBridge) {
     console.log(
-      `[b3rys] Bridge player response: videoId=${playerResponseVideoId(fromBridge)}, expected=${videoId}`,
+      `[web-translate] Bridge player response: videoId=${playerResponseVideoId(fromBridge)}, expected=${videoId}`,
     );
     if (isPlayerResponseFor(fromBridge, videoId)) return fromBridge;
   }
@@ -408,18 +411,18 @@ async function getPlayerResponse(): Promise<Record<string, unknown> | null> {
   // from being used on the current one.
   const fromDOM = extractFromScripts();
   if (isPlayerResponseFor(fromDOM, videoId)) {
-    console.log('[b3rys] Using player response from script tags');
+    console.log('[web-translate] Using player response from script tags');
     return fromDOM;
   }
   if (fromDOM) {
     console.log(
-      `[b3rys] Script-tag player response is for ${playerResponseVideoId(fromDOM)} — ignoring`,
+      `[web-translate] Script-tag player response is for ${playerResponseVideoId(fromDOM)} — ignoring`,
     );
   }
 
   // Strategy 3: Fetch page HTML
   try {
-    console.log('[b3rys] Fetching page HTML for player response...');
+    console.log('[web-translate] Fetching page HTML for player response...');
     const response = await fetch(location.href);
     const html = await response.text();
     const fromHTML = extractPlayerResponseJSON(html);
@@ -448,12 +451,12 @@ export function isPlayerResponseFor(
 function getPlayerResponseFromBridge(): Promise<Record<string, unknown> | null> {
   return new Promise((resolve) => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_player_response') return;
+      if (e.data?.type !== '__web_translate_player_response') return;
       window.removeEventListener('message', handler);
       resolve(e.data.data ?? null);
     };
     window.addEventListener('message', handler);
-    window.postMessage({ type: '__b3rys_get_player_response' });
+    window.postMessage({ type: '__web_translate_get_player_response' });
     setTimeout(() => {
       window.removeEventListener('message', handler);
       resolve(null);
@@ -526,7 +529,7 @@ function tryParse(text: string): SubtitleCue[] | null {
   try {
     return parseSubtitleResponse(text);
   } catch (err) {
-    console.warn('[b3rys] Intercepted payload was not subtitle data — discarding:', err);
+    console.warn('[web-translate] Intercepted payload was not subtitle data — discarding:', err);
     return null;
   }
 }

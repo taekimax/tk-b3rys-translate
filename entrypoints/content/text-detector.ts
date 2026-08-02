@@ -81,7 +81,7 @@ function detectSelectorBlocks(
     const text = (htmlEl.textContent ?? '').trim();
     if (!text || !isLikelyEnglish(text)) return;
 
-    const id = `b3rys-${++blockCounter}`;
+    const id = `web-translate-${++blockCounter}`;
     htmlEl.setAttribute(DATA_ATTRS.BLOCK_ID, id);
     blocks.push({ id, element: htmlEl, text, html: text });
   };
@@ -109,9 +109,9 @@ function detectSelectorBlocks(
 }
 
 /** Marks a wrapper this module created around one paragraph. */
-const PARA_ATTR = 'data-b3rys-para';
+const PARA_ATTR = 'data-web-translate-para';
 /** Marks an element already split, so a re-detect reuses the wrappers. */
-const PARA_SPLIT_ATTR = 'data-b3rys-split';
+const PARA_SPLIT_ATTR = 'data-web-translate-split';
 /** A blank line — one newline, optional horizontal space, another newline. */
 const PARA_BREAK = /\n[ \t]*\n/;
 
@@ -440,7 +440,7 @@ function detectStandardBlocks(root: Element, splitParagraphs = false): TextBlock
             continue;
           const text = getDirectText(paragraph).trim();
           if (shouldSkipText(paragraph, text, 1)) continue;
-          const id = `b3rys-${++blockCounter}`;
+          const id = `web-translate-${++blockCounter}`;
           paragraph.setAttribute(DATA_ATTRS.BLOCK_ID, id);
           blocks.push({ id, element: paragraph, text, html: getDirectHTML(paragraph).trim() });
         }
@@ -448,7 +448,7 @@ function detectStandardBlocks(root: Element, splitParagraphs = false): TextBlock
       }
     }
 
-    const id = `b3rys-${++blockCounter}`;
+    const id = `web-translate-${++blockCounter}`;
     el.setAttribute(DATA_ATTRS.BLOCK_ID, id);
     const html = getDirectHTML(el).trim();
     blocks.push({ id, element: el, text, html });
@@ -605,7 +605,7 @@ function detectLeafTextBlocks(root: Element, splitParagraphs = false): TextBlock
             continue;
           const text = paragraph.textContent?.trim().replace(/\s+/g, ' ') ?? '';
           if (shouldSkipText(paragraph, text, 2)) continue;
-          const id = `b3rys-${++blockCounter}`;
+          const id = `web-translate-${++blockCounter}`;
           paragraph.setAttribute(DATA_ATTRS.BLOCK_ID, id);
           blocks.push({ id, element: paragraph, text, html: text });
         }
@@ -613,7 +613,7 @@ function detectLeafTextBlocks(root: Element, splitParagraphs = false): TextBlock
       }
     }
 
-    const id = `b3rys-${++blockCounter}`;
+    const id = `web-translate-${++blockCounter}`;
     el.setAttribute(DATA_ATTRS.BLOCK_ID, id);
     blocks.push({ id, element: el, text, html: text });
   }
@@ -658,7 +658,7 @@ function getDirectText(el: HTMLElement): string {
       const childEl = child as HTMLElement;
       if (
         childEl.hasAttribute(DATA_ATTRS.TRANSLATED) ||
-        childEl.hasAttribute('data-b3rys-loader') ||
+        childEl.hasAttribute('data-web-translate-loader') ||
         isTextCollectionBoundary(childEl)
       )
         continue;
@@ -681,7 +681,7 @@ export function getDetectedSourceText(el: HTMLElement): string {
   return text.trim().replace(/\s+/g, ' ');
 }
 
-/** Read source text without counting b3rys's own provisional/final output. */
+/** Read source text without counting web-translate's own provisional/final output. */
 function getTextWithoutTranslations(el: HTMLElement): string {
   let text = '';
   for (const child of el.childNodes) {
@@ -689,7 +689,10 @@ function getTextWithoutTranslations(el: HTMLElement): string {
       text += child.textContent;
     } else if (child.nodeType === Node.ELEMENT_NODE) {
       const childEl = child as HTMLElement;
-      if (childEl.hasAttribute(DATA_ATTRS.TRANSLATED) || childEl.hasAttribute('data-b3rys-loader'))
+      if (
+        childEl.hasAttribute(DATA_ATTRS.TRANSLATED) ||
+        childEl.hasAttribute('data-web-translate-loader')
+      )
         continue;
       text += getTextWithoutTranslations(childEl);
     }

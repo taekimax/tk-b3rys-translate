@@ -101,7 +101,7 @@ export async function startRollingTranslation(
             for (const c of batch) inFlight.delete(c.text);
 
             if (response?.error) {
-              console.warn('[b3rys] Subtitle translation error:', response.error);
+              console.warn('[web-translate] Subtitle translation error:', response.error);
               return;
             }
 
@@ -116,7 +116,7 @@ export async function startRollingTranslation(
           .catch((err: unknown) => {
             // Clear in-flight so retry is possible on next event
             for (const c of batch) inFlight.delete(c.text);
-            console.warn('[b3rys] Subtitle translation failed:', err);
+            console.warn('[web-translate] Subtitle translation failed:', err);
           });
       }
     }

@@ -7,6 +7,8 @@ import {
 } from '@/utils/constants';
 import css from './selection-popup.css?raw';
 import { isContextInvalidated, markContextInvalidated } from './context-invalidated';
+import type { UiLanguage } from '@/utils/constants';
+import { getActiveUiLanguage, uiText } from '@/utils/ui-language';
 
 const TRIGGER_ICON = `<svg viewBox="0 0 20 20" fill="none">
   <text x="10" y="11" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="14" font-weight="800" fill="currentColor">A</text>
@@ -24,7 +26,7 @@ const CHECK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
   <path d="M5 12l5 5L20 7"/>
 </svg>`;
 
-const SPINNER_SVG = `<svg class="b3rys-sel-spinner" viewBox="0 0 20 20" fill="none">
+const SPINNER_SVG = `<svg class="web-translate-sel-spinner" viewBox="0 0 20 20" fill="none">
   <path d="M10 3a7 7 0 0 1 7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 </svg>`;
 
@@ -39,6 +41,7 @@ let triggerEl: HTMLButtonElement | null = null;
 let popupEl: HTMLDivElement | null = null;
 
 let selectionSourceScript: 'latin' | 'cjk' | 'cyrillic' = 'latin';
+let selectionUiLanguage: UiLanguage = getActiveUiLanguage();
 
 export async function loadSelectionSourceLanguage(): Promise<void> {
   try {
@@ -85,7 +88,7 @@ function ensureShadowRoot(): ShadowRoot {
   if (shadowRoot) return shadowRoot;
 
   host = document.createElement('div');
-  host.id = 'b3rys-selection-popup-root';
+  host.id = 'web-translate-selection-popup-root';
   shadowRoot = host.attachShadow({ mode: 'closed' });
 
   const style = document.createElement('style');
@@ -119,7 +122,7 @@ function showTrigger(clientX: number, clientY: number, clientY2?: number): void 
   const root = ensureShadowRoot();
 
   triggerEl = document.createElement('button');
-  triggerEl.className = 'b3rys-sel-trigger';
+  triggerEl.className = 'web-translate-sel-trigger';
   triggerEl.innerHTML = TRIGGER_ICON;
 
   // Position: right end of selection's last line
@@ -137,10 +140,10 @@ function showPopup(anchorX: number, anchorY: number, compact = false): void {
   const root = ensureShadowRoot();
 
   popupEl = document.createElement('div');
-  popupEl.className = compact ? 'b3rys-sel-popup compact' : 'b3rys-sel-popup';
+  popupEl.className = compact ? 'web-translate-sel-popup compact' : 'web-translate-sel-popup';
 
   const inner = document.createElement('div');
-  inner.className = 'b3rys-sel-popup-inner';
+  inner.className = 'web-translate-sel-popup-inner';
   popupEl.appendChild(inner);
 
   const popupWidth = compact ? 320 : 440;
@@ -163,9 +166,9 @@ function showPopup(anchorX: number, anchorY: number, compact = false): void {
 }
 
 function setPopupLoading(): void {
-  const inner = popupEl?.querySelector('.b3rys-sel-popup-inner');
+  const inner = popupEl?.querySelector('.web-translate-sel-popup-inner');
   if (!inner) return;
-  inner.innerHTML = `<div class="b3rys-sel-loading">${SPINNER_SVG}<span>번역 중...</span></div>`;
+  inner.innerHTML = `<div class="web-translate-sel-loading">${SPINNER_SVG}<span>${uiText('selectionLoading', selectionUiLanguage)}</span></div>`;
 }
 
 /**
@@ -179,30 +182,32 @@ export function splitSentences(text: string): string[] {
 }
 
 function setPopupResult(text: string): void {
-  const inner = popupEl?.querySelector('.b3rys-sel-popup-inner');
+  const inner = popupEl?.querySelector('.web-translate-sel-popup-inner');
   if (!inner) return;
 
   const result = document.createElement('div');
-  result.className = 'b3rys-sel-result';
+  result.className = 'web-translate-sel-result';
 
   const textEl = document.createElement('div');
-  textEl.className = 'b3rys-sel-text';
+  textEl.className = 'web-translate-sel-text';
 
   // Break long translations into separate lines per sentence
   const sentences = splitSentences(text);
   if (sentences.length > 1) {
     textEl.innerHTML = sentences
-      .map((s) => `<span class="b3rys-sel-sentence">${s}</span>`)
+      .map((s) => `<span class="web-translate-sel-sentence">${s}</span>`)
       .join('');
   } else {
     textEl.textContent = text;
   }
 
   const actions = document.createElement('div');
-  actions.className = 'b3rys-sel-actions';
+  actions.className = 'web-translate-sel-actions';
 
   const copyBtn = document.createElement('button');
-  copyBtn.className = 'b3rys-sel-copy';
+  copyBtn.className = 'web-translate-sel-copy';
+  copyBtn.setAttribute('aria-label', uiText('copy', selectionUiLanguage));
+  copyBtn.title = uiText('copy', selectionUiLanguage);
   copyBtn.innerHTML = COPY_ICON;
   copyBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -263,27 +268,29 @@ export function parseWordResponse(raw: string): {
 export function highlightWord(sentence: string, word: string): string {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`(${escaped})`, 'gi');
-  return sentence.replace(re, '<span class="b3rys-sel-highlight">$1</span>');
+  return sentence.replace(re, '<span class="web-translate-sel-highlight">$1</span>');
 }
 
 function setPopupWordResult(raw: string, originalWord: string): void {
-  const inner = popupEl?.querySelector('.b3rys-sel-popup-inner');
+  const inner = popupEl?.querySelector('.web-translate-sel-popup-inner');
   if (!inner) return;
 
   const { translation, definition, similarWords, examples } = parseWordResponse(raw);
 
   const result = document.createElement('div');
-  result.className = 'b3rys-sel-result';
+  result.className = 'web-translate-sel-result';
 
   // Header row: "word — translation" + speak button
   const header = document.createElement('div');
-  header.className = 'b3rys-sel-word-header';
+  header.className = 'web-translate-sel-word-header';
 
   const headerText = document.createElement('span');
-  headerText.innerHTML = `<span class="b3rys-sel-word-original">${originalWord}</span> <span class="b3rys-sel-word-dash">—</span> <span class="b3rys-sel-word-translation">${translation}</span>`;
+  headerText.innerHTML = `<span class="web-translate-sel-word-original">${originalWord}</span> <span class="web-translate-sel-word-dash">—</span> <span class="web-translate-sel-word-translation">${translation}</span>`;
 
   const speakBtn = document.createElement('button');
-  speakBtn.className = 'b3rys-sel-speak';
+  speakBtn.className = 'web-translate-sel-speak';
+  speakBtn.setAttribute('aria-label', uiText('speak', selectionUiLanguage));
+  speakBtn.title = uiText('speak', selectionUiLanguage);
   speakBtn.innerHTML = SPEAK_ICON;
   speakBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -307,7 +314,7 @@ function setPopupWordResult(raw: string, originalWord: string): void {
   // English definition (small, grey)
   if (definition) {
     const defEl = document.createElement('div');
-    defEl.className = 'b3rys-sel-word-definition';
+    defEl.className = 'web-translate-sel-word-definition';
     defEl.textContent = definition;
     result.appendChild(defEl);
   }
@@ -315,28 +322,28 @@ function setPopupWordResult(raw: string, originalWord: string): void {
   // Similar words
   if (similarWords) {
     const simEl = document.createElement('div');
-    simEl.className = 'b3rys-sel-word-similar';
+    simEl.className = 'web-translate-sel-word-similar';
     const words = similarWords
       .split(',')
-      .map((w) => `<span class="b3rys-sel-word-similar-word">${w.trim()}</span>`);
-    simEl.innerHTML = `<span class="b3rys-sel-word-similar-label">≈</span> ${words.join(', ')}`;
+      .map((w) => `<span class="web-translate-sel-word-similar-word">${w.trim()}</span>`);
+    simEl.innerHTML = `<span class="web-translate-sel-word-similar-label">≈</span> ${words.join(', ')}`;
     result.appendChild(simEl);
   }
 
   // Examples
   if (examples.length > 0) {
     const sep = document.createElement('div');
-    sep.className = 'b3rys-sel-separator';
+    sep.className = 'web-translate-sel-separator';
     result.appendChild(sep);
 
     for (const ex of examples) {
       const enEl = document.createElement('div');
-      enEl.className = 'b3rys-sel-example-en';
+      enEl.className = 'web-translate-sel-example-en';
       enEl.innerHTML = `• ${highlightWord(ex.en, originalWord)}`;
       result.appendChild(enEl);
 
       const koEl = document.createElement('div');
-      koEl.className = 'b3rys-sel-example-ko';
+      koEl.className = 'web-translate-sel-example-ko';
       koEl.textContent = `→ ${ex.ko}`;
       result.appendChild(koEl);
     }
@@ -347,9 +354,9 @@ function setPopupWordResult(raw: string, originalWord: string): void {
 }
 
 function setPopupError(message: string): void {
-  const inner = popupEl?.querySelector('.b3rys-sel-popup-inner');
+  const inner = popupEl?.querySelector('.web-translate-sel-popup-inner');
   if (!inner) return;
-  inner.innerHTML = `<div class="b3rys-sel-error">${message}</div>`;
+  inner.innerHTML = `<div class="web-translate-sel-error">${message}</div>`;
 }
 
 async function translateSelection(text: string, wordMode: boolean): Promise<void> {
@@ -366,11 +373,11 @@ async function translateSelection(text: string, wordMode: boolean): Promise<void
     if (!popupEl) return;
 
     if (response.localHostError) {
-      setPopupError('로컬 MLX 호스트를 확인해주세요.');
+      setPopupError(uiText('selectionHostUnavailable', selectionUiLanguage));
       return;
     }
     if (response.error) {
-      setPopupError(`번역 실패: ${response.error}`);
+      setPopupError(uiText('selectionFailed', selectionUiLanguage, { error: response.error }));
       return;
     }
 
@@ -382,7 +389,7 @@ async function translateSelection(text: string, wordMode: boolean): Promise<void
         setPopupResult(translated);
       }
     } else {
-      setPopupError('번역 결과가 없습니다.');
+      setPopupError(uiText('selectionNoResult', selectionUiLanguage));
     }
   } catch (err) {
     if (!popupEl) return;
@@ -390,7 +397,7 @@ async function translateSelection(text: string, wordMode: boolean): Promise<void
       markContextInvalidated();
       return;
     }
-    setPopupError('번역 요청 중 오류가 발생했습니다.');
+    setPopupError(uiText('selectionRequestFailed', selectionUiLanguage));
   }
 }
 
@@ -457,7 +464,8 @@ function onResize(): void {
 
 let listening = false;
 
-export function initSelectionPopup(): void {
+export function initSelectionPopup(language: UiLanguage = getActiveUiLanguage()): void {
+  selectionUiLanguage = language;
   if (listening) return;
   listening = true;
 
@@ -465,6 +473,10 @@ export function initSelectionPopup(): void {
   document.addEventListener('mousedown', onMouseDown, true);
   window.addEventListener('scroll', onScroll);
   window.addEventListener('resize', onResize);
+}
+
+export function setSelectionUiLanguage(language: UiLanguage): void {
+  selectionUiLanguage = language;
 }
 
 export function destroySelectionPopup(): void {

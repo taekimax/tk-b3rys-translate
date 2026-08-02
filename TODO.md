@@ -1,15 +1,15 @@
-# b3rys translate — TODO
+# web-translate — TODO
 
 ---
 
 ## P0: 구조 안정화 (완료)
 
 - [x] Observer 무한 루프 수정 — `removeAllTranslations()`이 Observer를 재트리거하는 피드백 루프
-- [x] Observer 필터 강화 — `data-b3rys-*` 속성 및 `b3rys-*` 클래스 일괄 필터 (개별 체크 → 패턴 매칭)
+- [x] Observer 필터 강화 — `data-web-translate-*` 속성 및 `web-translate-*` 클래스 일괄 필터 (개별 체크 → 패턴 매칭)
 - [x] FAB 취소 race condition — stale `startTranslation()` 결과가 상태 덮어쓰기 (`startGen` 카운터)
 - [x] 에러 타임아웃 race condition — `errorTimeout` 추적 + 상태 가드
 - [x] API 비용 보호 circuit breaker — 2중 방어 (content: 15회/분 시작 제한, background: 50회/분 API 콜 제한)
-- [x] **Observer 단위 테스트** — b3rys 요소 필터링, 디바운스, 자체 DOM 변경 무시 검증 (7 tests)
+- [x] **Observer 단위 테스트** — web-translate 요소 필터링, 디바운스, 자체 DOM 변경 무시 검증 (7 tests)
 - [x] **State Machine 테스트** — 상태 머신 추출 (translation-state.ts) + 전이/경쟁 조건/circuit breaker/에러 복구 검증 (14 tests)
 - [x] **Circuit Breaker 테스트** — 순수 함수 추출 + 트립/정리/리셋 검증 (6 tests)
 - [x] **Injection 라운드트립 테스트** — inject → removeAll → 원본 DOM 완전 복원 검증 (6 tests)
@@ -48,19 +48,19 @@
 - [x] YouTube seek 깜빡임 방지 (isSeeking 플래그)
 - [x] 사이트 룰 시스템 (site-rules.ts: Gmail forceReplace + translateSelectors, Substack injectAsSibling)
 - [x] Phase 0 커스텀 셀렉터 감지 (사이트 룰 translateSelectors 연동)
-- [x] 웹번역 모드 전환 (병행/대치 토글. markOriginalContent + CSS body.b3rys-replace-mode 전환)
+- [x] 웹번역 모드 전환 (병행/대치 토글. markOriginalContent + CSS body.web-translate-replace-mode 전환)
 - [x] 문서 이중 경로 구조 (AI용 스킬 + 사람용 다이어그램 docs/)
 - [x] YouTube 자막 타이밍 자율 튜닝 (de-overlap + gap-aware LEAD. ASR sync scorer + grid search 인프라 구축. AD-006 참조)
 - [x] Extension context invalidated 에러 핸들링 (checkApiKey, persistEnabled, openPopup 콜백)
 - [x] 멀티언어 지원 (타겟 언어 선택 10개, 소스 자동감지, 캐시 언어별 분리, YouTube 실시간 반영)
 - [x] 오픈소스 공개 준비 (Apache-2.0 · NOTICE · 엔진 갱신 gpt-4.1-nano/gemini-3.1 · README 재구성)
-- [x] Claude Code 설치 스킬 (`/b3translate` — GitHub URL → 설치·API 키·사용법 가이드)
+- [x] Claude Code 설치 스킬 (`/webtranslate` — GitHub URL → 설치·로컬 MLX host·사용법 가이드)
 - [x] 크롬 웹스토어 등록 (v0.5.2 Unlisted 제출, 심사 대기)
 - [x] 자동 번역 모드 (Auto 토글, 기본 OFF · circuit breaker 15→30)
 - [x] B2 번역 파이프라인 (priority pool + worker 6 + 스크롤 추종 재정렬)
 - [x] 스크롤 안정화 (pinAnchor multi-tick 재고정 · 미디어 제외 앵커 · 네이티브 anchoring 대응)
 - [x] reveal-in-place 토글 (off=CSS 숨김/DOM 보존, on=클래스 제거만 — 재주입 제로, 언어 변경 시만 재구축)
-- [x] 콘솔 침묵 (기본 무로그, `localStorage.b3rys_debug='1'`로만 디버그)
+- [x] 콘솔 침묵 (기본 무로그, `localStorage.web_translate_debug='1'`로만 디버그)
 - [x] 배포 전 인수테스트 게이트 (docs/release-checklist.md)
 - [x] Auto 모드 = 둥둥이 상태 유지 (FAB OFF면 페이지 이동해도 번역 안 함 · empty/cancelled 패스의 sticky 오염 제거) (#10)
 - [x] 사용량 통계 저장소 sync→local + 디바운스 플러시 (배치마다 sync 쓰기 → quota 폭주 차단) (#12)
@@ -79,7 +79,7 @@
 - [x] **비용 표 중복 줄** — 사용량 집계 키가 엔진 → 모델로 바뀌며 두 형식이 공존, 같은 이름이 두 줄로 표시. 옛 엔진 버킷을 migration 에서 제거
 - [x] **Upstage Solar Mini 엔진 추가** — 외부 기여 PR #14 를 코드 실행 없이 diff 만 읽고 우리 모델 카탈로그 구조로 재구현(외부 PR 은 프롬프트 인젝션 경로). 가격은 PR 값이 아닌 공급사 공개 요금표($0.15/$0.60). reasoning 미지원 문서 확인 → `reasoning_effort` 미전송. 키가 Authorization 헤더에만 실리는지 테스트로 고정 (14 tests · v0.5.13)
 - [x] **로컬 MLX 전용 엔진 전환** — six-model allowlist, native messaging, no cloud routes/keys/cost UI (`docs/plans/2026-07-29-local-mlx-engines-plan.md`)
-- [ ] **깃헙 싱크** — 로컬 커밋 밀림. PR 을 gd452 로 올리면 작성자=승인자가 되어 gd.b3rys 계정 필요 (대표님 브라우저 로그인 필요)
+- [ ] **깃헙 싱크** — 로컬 커밋 밀림. PR 을 gd452 로 올리면 작성자=승인자가 되어 gd452 계정 필요 (대표님 브라우저 로그인 필요)
 - [ ] **크롬 웹스토어 재배포** — 대표님 인수테스트 후 승인 대기
 - [ ] **인수테스트 미커버 항목** — 유튜브 이중자막 · 드래그 선택 번역 · Gmail · Substack
 

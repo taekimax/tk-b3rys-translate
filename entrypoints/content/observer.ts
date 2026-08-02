@@ -8,13 +8,13 @@ import type { ContentChangeKind } from '@/utils/translation-state';
 // 'replaced': elements we already detected (BLOCK_ID) were removed — a real
 //             content swap / SPA navigation. In-flight results are stale.
 
-/** Check if an element was created by b3rys (any data-b3rys-* attr or b3rys-* class) */
-function isB3rysElement(el: HTMLElement): boolean {
+/** Check if an element was created by web-translate (any data-web-translate-* attr or web-translate-* class) */
+function isWebTranslateElement(el: HTMLElement): boolean {
   for (const attr of el.attributes) {
-    if (attr.name.startsWith('data-b3rys')) return true;
+    if (attr.name.startsWith('data-web-translate')) return true;
   }
   const cn = el.className;
-  return typeof cn === 'string' && cn.includes('b3rys-');
+  return typeof cn === 'string' && cn.includes('web-translate-');
 }
 
 /**
@@ -46,7 +46,8 @@ export function observeDynamicContent(onNewContent: (kind: ContentChangeKind) =>
         // pass. Text changes in the site's original DOM can invalidate an
         // in-flight block and need a follow-up detection pass.
         const parent = mutation.target.parentElement;
-        if (parent?.closest('[data-b3rys-translated], [data-b3rys-loader]')) continue;
+        if (parent?.closest('[data-web-translate-translated], [data-web-translate-loader]'))
+          continue;
         pendingKind = pendingKind ?? 'added';
         continue;
       }
@@ -59,7 +60,7 @@ export function observeDynamicContent(onNewContent: (kind: ContentChangeKind) =>
       }
       if (pendingKind === 'replaced') break;
       for (const node of mutation.addedNodes) {
-        if (node instanceof HTMLElement && !isB3rysElement(node)) {
+        if (node instanceof HTMLElement && !isWebTranslateElement(node)) {
           pendingKind = pendingKind ?? 'added';
           break;
         }

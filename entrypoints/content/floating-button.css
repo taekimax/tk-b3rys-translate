@@ -2,7 +2,7 @@
   all: initial;
 }
 
-.b3rys-wrap {
+.web-translate-wrap {
   position: fixed;
   right: -12px;
   top: 75%;
@@ -15,12 +15,12 @@
   transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.b3rys-wrap:hover {
+.web-translate-wrap:hover {
   right: 6px;
 }
 
 /* Close button */
-.b3rys-close {
+.web-translate-close {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -39,28 +39,28 @@
   pointer-events: none;
 }
 
-.b3rys-wrap:hover .b3rys-close {
+.web-translate-wrap:hover .web-translate-close {
   opacity: 1;
   pointer-events: auto;
 }
 
-.b3rys-close:hover {
+.web-translate-close:hover {
   background: rgba(248, 81, 73, 0.7);
   color: #fff;
 }
 
-.b3rys-close svg {
+.web-translate-close svg {
   width: 8px;
   height: 8px;
 }
 
 /* Main FAB */
-.b3rys-fab {
+.web-translate-fab {
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  border: 1px solid rgba(126, 231, 135, 0.5);
-  background: rgba(13, 17, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
@@ -74,70 +74,78 @@
   box-shadow:
     0 3px 12px rgba(0, 0, 0, 0.34),
     0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 14px rgba(126, 231, 135, 0.06);
+    0 0 14px rgba(255, 255, 255, 0.08);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   -webkit-user-select: none;
   opacity: 0.88;
 }
 
-.b3rys-fab:hover {
+.web-translate-fab:hover {
   opacity: 1;
-  border-color: rgba(126, 231, 135, 0.78);
+  border-color: #fff;
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(126, 231, 135, 0.08);
+    0 0 20px rgba(255, 255, 255, 0.14);
   transform: scale(1.04);
 }
 
-.b3rys-fab:focus-visible {
-  outline: 2px solid #7ee787;
+.web-translate-fab:focus-visible {
+  outline: 2px solid #fff;
   outline-offset: 3px;
 }
 
-.b3rys-fab:active {
+.web-translate-fab:active {
   transform: scale(0.95);
 }
 
 /* Icon states */
-.b3rys-fab svg.icon {
+.web-translate-fab svg.icon {
   width: 19px;
   height: 19px;
   transition: opacity 0.2s ease;
 }
 
-.b3rys-fab .icon-translate {
-  color: #7ee787;
+.web-translate-fab .app-button-icon {
+  width: 29px;
+  height: 29px;
+  object-fit: contain;
+  border-radius: 8px;
+  transition: opacity 0.2s ease;
 }
-.b3rys-fab .icon-loading {
-  color: #7ee787;
+
+.web-translate-fab .icon-translate {
+  color: #fff;
+}
+.web-translate-fab .icon-loading {
+  color: #fff;
   animation: spin 1s linear infinite;
 }
-.b3rys-fab .icon-done {
-  color: #7ee787;
+.web-translate-fab .icon-done {
+  color: #fff;
 }
-.b3rys-fab .icon-error {
+.web-translate-fab .icon-error {
   color: #f85149;
 }
 
-.b3rys-fab .icon {
+.web-translate-fab .icon {
   display: none;
 }
-.b3rys-fab[data-state='idle'] .icon-translate {
+.web-translate-fab[data-state='idle'] .icon-translate {
   display: block;
 }
-.b3rys-fab[data-state='loading'] .icon-loading {
+.web-translate-fab[data-state='loading'] .icon-loading {
   display: block;
 }
-.b3rys-fab[data-state='done'] .icon-done {
+.web-translate-fab[data-state='done'] .icon-done {
   display: block;
 }
-.b3rys-fab[data-state='error'] .icon-error {
+.web-translate-fab[data-state='error'] .icon-error {
   display: block;
 }
 
 /* Usage gauge */
-.b3rys-usage-gauge {
+.web-translate-usage-gauge {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -154,20 +162,20 @@
 }
 
 /* Progress ring */
-.b3rys-progress {
+.web-translate-progress {
   position: absolute;
   inset: -4px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-.b3rys-fab[data-state='loading'] .b3rys-progress {
+.web-translate-fab[data-state='loading'] .web-translate-progress {
   opacity: 1;
 }
 
-.b3rys-progress circle {
+.web-translate-progress circle {
   fill: none;
-  stroke: #7ee787;
+  stroke: #fff;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-dasharray: 125;
@@ -178,15 +186,15 @@
 }
 
 /* Mode toggle button */
-.b3rys-mode-toggle {
+.web-translate-mode-toggle {
   height: 16px;
   padding: 0 5px;
   border-radius: 8px;
-  border: 1px solid rgba(126, 231, 135, 0.35);
-  background: rgba(13, 17, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  color: #7ee787;
+  color: #fff;
   font-family: -apple-system, 'Apple SD Gothic Neo', BlinkMacSystemFont, sans-serif;
   font-size: 9px;
   font-weight: 700;
@@ -202,17 +210,17 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
-.b3rys-wrap:hover .b3rys-mode-toggle {
+.web-translate-wrap:hover .web-translate-mode-toggle {
   opacity: 1;
   pointer-events: auto;
 }
 
-.b3rys-mode-toggle:hover {
-  background: rgba(126, 231, 135, 0.15);
-  border-color: rgba(126, 231, 135, 0.6);
+.web-translate-mode-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fff;
 }
 
-.b3rys-mode-toggle:active {
+.web-translate-mode-toggle:active {
   transform: scale(0.93);
 }
 
@@ -234,12 +242,12 @@
   }
 }
 
-.b3rys-wrap {
+.web-translate-wrap {
   animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* Toast — small text next to FAB */
-.b3rys-toast {
+.web-translate-toast {
   position: absolute;
   right: calc(100% + 8px);
   top: 50%;
@@ -247,8 +255,8 @@
   padding: 4px 10px;
   border-radius: 6px;
   background: rgba(13, 17, 23, 0.95);
-  border: 1px solid rgba(126, 231, 135, 0.3);
-  color: #7ee787;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #fff;
   font:
     11px/1.4 -apple-system,
     'Apple SD Gothic Neo',

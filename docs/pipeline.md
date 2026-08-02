@@ -35,11 +35,11 @@
 │                                    ┌───────────┴──────────┐        │
 │                                    │ 캐시 체크             │        │
 │                                    │ hit → 즉시 반환       │        │
-│                                    │ miss → API 호출       │        │
+│                                    │ miss → native 요청    │        │
 │                                    └───────────┬──────────┘        │
 │                                                │                   │
 │                                    ┌───────────┴──────────┐        │
-│                                    │ Gemini │ OpenAI │ .. │        │
+│                                    │ local MLX host        │        │
 │                                    └───────────┬──────────┘        │
 │                                                │                   │
 │                                          응답 + 캐시 저장          │
@@ -149,23 +149,23 @@ injectTranslation(element, translatedText)
   │  LI 또는 A(LI 안) 이고 ≤60자?
   ├─ YES → 경로 1: 네비 인라인
   │        label 스팬 찾아서 안에 삽입
-  │        class: b3rys-translation-inline
+  │        class: web-translate-translation-inline
   │
   │  사이트 룰: injectAsSibling + inline 요소?
   ├─ YES → 경로 2: 형제 삽입
   │        element.after(translationSpan)
-  │        class: b3rys-translation
+  │        class: web-translate-translation
   │
   │  사이트 룰: forceReplace?
   ├─ YES → 경로 2.5: 강제 교체
   │        markOriginalContent() + 번역 추가
   │        CSS로 parallel/replace 전환
-  │        class: b3rys-translation
+  │        class: web-translate-translation
   │
   └─ NO  → 경로 3: 블록 내부 (기본)
            markOriginalContent() + 요소 안에 번역 추가
-           ≤60자: b3rys-translation-inline
-           >60자/제목: b3rys-translation
+           ≤60자: web-translate-translation-inline
+           >60자/제목: web-translate-translation
 ```
 
 ### markOriginalContent 동작
@@ -176,12 +176,12 @@ Before:
 
 After markOriginalContent():
 <p>
-  <span data-b3rys-original>"Hello "</span>     ← 텍스트 노드 래핑
-  <a data-b3rys-original>world</a>              ← 기존 요소에 속성 추가
-  <span data-b3rys-translated>번역문</span>     ← 번역 삽입
+  <span data-web-translate-original>"Hello "</span>     ← 텍스트 노드 래핑
+  <a data-web-translate-original>world</a>              ← 기존 요소에 속성 추가
+  <span data-web-translate-translated>번역문</span>     ← 번역 삽입
 </p>
 
-Replace 모드: CSS가 [data-b3rys-original] { display: none }
+Replace 모드: CSS가 [data-web-translate-original] { display: none }
 Parallel 모드: 둘 다 표시
 ```
 
@@ -231,8 +231,8 @@ Parallel 모드: 둘 다 표시
 │ 새 노드 추가됨                                    │
 │   │                                              │
 │   ├─ 텍스트 노드? ────────── 무시                 │
-│   ├─ data-b3rys-* 속성? ──── 무시 (자체 변경)     │
-│   ├─ b3rys-* 클래스? ─────── 무시 (자체 변경)     │
+│   ├─ data-web-translate-* 속성? ──── 무시 (자체 변경)     │
+│   ├─ web-translate-* 클래스? ─────── 무시 (자체 변경)     │
 │   └─ 일반 HTMLElement? ───── hasNewContent = true │
 │                                                  │
 │ hasNewContent?                                   │

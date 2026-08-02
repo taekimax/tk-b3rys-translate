@@ -103,10 +103,10 @@ describe('antirez preformatted prose rule', () => {
     document.body.innerHTML = fixture;
 
     detectTextBlocks(document.body);
-    const first = document.querySelectorAll('[data-b3rys-para]').length;
+    const first = document.querySelectorAll('[data-web-translate-para]').length;
     detectTextBlocks(document.body);
 
-    expect(document.querySelectorAll('[data-b3rys-para]').length).toBe(first);
+    expect(document.querySelectorAll('[data-web-translate-para]').length).toBe(first);
   });
 
   it('does not translate an indented code paragraph inside the prose PRE', () => {

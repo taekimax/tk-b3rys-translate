@@ -13,9 +13,10 @@ import { isFighting, recordInjection, resetFightGuard } from '@/utils/fight-guar
 import { detectTextBlocks, getDetectedSourceText } from './text-detector';
 import { isContextInvalidated, markContextInvalidated } from './context-invalidated';
 import { dbg, isDebug } from '@/utils/debug';
+import { uiText } from '@/utils/ui-language';
 
 let translateGen = 0;
-const REPLACE_MODE_CLASS = 'b3rys-replace-mode';
+const REPLACE_MODE_CLASS = 'web-translate-replace-mode';
 
 // Timestamp of the user's last scroll INTENT. Listens to raw input
 // (wheel/touch/scroll keys), NOT 'scroll' events — our own drift corrections
@@ -38,7 +39,7 @@ window.addEventListener(
   { capture: true, passive: true },
 );
 
-// Debug-only scroll-jump watcher: with localStorage.b3rys_debug='1', any
+// Debug-only scroll-jump watcher: with localStorage.web_translate_debug='1', any
 // abrupt viewport jump (>80px between scroll events) is reported with the
 // translation phase that was active — one console screenshot pinpoints the
 // culprit without pasting probe snippets.
@@ -55,7 +56,7 @@ if (isDebug()) {
       const d = y - lastY;
       lastY = y;
       if (Math.abs(d) > 30) {
-        console.warn('[b3rys][jump] %dpx (y %d→%d) phase=%s', d, y - d, y, debugPhase);
+        console.warn('[web-translate][jump] %dpx (y %d→%d) phase=%s', d, y - d, y, debugPhase);
       }
     },
     { capture: true, passive: true },
@@ -94,11 +95,11 @@ function getScrollContainer(el: Element): HTMLElement | null {
   return null;
 }
 
-function isB3rysOwned(el: Element): boolean {
+function isWebTranslateOwned(el: Element): boolean {
   return (
-    !!el.hasAttribute?.('data-b3rys-translated') ||
-    !!el.hasAttribute?.('data-b3rys-original') ||
-    !!el.closest?.('[data-b3rys-translated]')
+    !!el.hasAttribute?.('data-web-translate-translated') ||
+    !!el.hasAttribute?.('data-web-translate-original') ||
+    !!el.closest?.('[data-web-translate-translated]')
   );
 }
 
@@ -140,7 +141,7 @@ function findContentAnchor(scroller: HTMLElement | null): ScrollAnchor | null {
     const y = rect.top + dy;
     if (y >= maxY) continue;
     let el: Element | null = document.elementFromPoint(x, y);
-    while (el && isB3rysOwned(el)) el = el.parentElement;
+    while (el && isWebTranslateOwned(el)) el = el.parentElement;
     // Media elements (lazy images!) resize after load — their rects are
     // unstable and poisoned every drift measurement on image-heavy pages.
     // Climb to the nearest text-bearing ancestor instead.
@@ -374,8 +375,8 @@ export async function translatePage(
     const currentLang = await getTargetLang();
     const hiddenTranslations = document.querySelectorAll(`[${DATA_ATTRS.TRANSLATED}]`);
     const sameContext = pageContext
-      ? document.body.dataset.b3rysContext === pageContext.fingerprint
-      : document.body.dataset.b3rysLang === currentLang;
+      ? document.body.dataset.webTranslateContext === pageContext.fingerprint
+      : document.body.dataset.webTranslateLang === currentLang;
     if (hiddenTranslations.length > 0 && sameContext) {
       setDebugPhase('reveal-in-place');
       dbg('reveal-in-place: %d translations', hiddenTranslations.length);
@@ -432,8 +433,8 @@ export async function translatePage(
   completed += total - misses.length;
   if (completed > 0) onProgress?.(completed, total);
   if (misses.length === 0) {
-    if (pageContext) document.body.dataset.b3rysContext = pageContext.fingerprint;
-    document.body.dataset.b3rysLang = pageContext?.targetLang ?? (await getTargetLang());
+    if (pageContext) document.body.dataset.webTranslateContext = pageContext.fingerprint;
+    document.body.dataset.webTranslateLang = pageContext?.targetLang ?? (await getTargetLang());
     restoreScrollStyles();
     return 'done';
   }
@@ -451,8 +452,8 @@ export async function translatePage(
   );
 
   if (result === 'done') {
-    if (pageContext) document.body.dataset.b3rysContext = pageContext.fingerprint;
-    document.body.dataset.b3rysLang = pageContext?.targetLang ?? (await getTargetLang());
+    if (pageContext) document.body.dataset.webTranslateContext = pageContext.fingerprint;
+    document.body.dataset.webTranslateLang = pageContext?.targetLang ?? (await getTargetLang());
   }
   restoreScrollStyles();
   if (result === 'done' && getSiteRule()?.repaintAfterInject) {
@@ -705,7 +706,7 @@ export function setTranslationModeWhenAvailable(mode: TranslationMode): void {
   }
 }
 
-const HIDING_CLASS = 'b3rys-hiding-translations';
+const HIDING_CLASS = 'web-translate-hiding-translations';
 
 /**
  * CSS-only hide with scroll preservation.
@@ -893,7 +894,7 @@ async function processBlock(
       activeBlockTranslations.delete(block.id);
       return 'stale';
     }
-    const msg = err instanceof Error ? err.message : '번역을 완료하지 못했습니다.';
+    const msg = err instanceof Error ? err.message : uiText('translationFailed');
     removeLoader();
     activeBlockTranslations.delete(block.id);
     withScrollCompensation(scroller, () => showBlockError(block, gen, context, msg), [
@@ -916,11 +917,14 @@ export function applyTranslationProgress(progress: {
   const { block } = active;
   const scroller = getScrollContainer(block.element);
   withScrollCompensation(scroller, () => {
-    const loader = block.element.querySelector<HTMLElement>('[data-b3rys-loader]');
-    const label = loader?.querySelector<HTMLElement>('[data-b3rys-loader-label]');
+    const loader = block.element.querySelector<HTMLElement>('[data-web-translate-loader]');
+    const label = loader?.querySelector<HTMLElement>('[data-web-translate-loader-label]');
     if (loader && label) {
-      loader.dataset.b3rysProgress = 'true';
-      label.textContent = `긴 문단을 나누어 번역 중 · ${progress.completedChunks}/${progress.totalChunks}`;
+      loader.dataset.webTranslateProgress = 'true';
+      label.textContent = uiText('longParagraphProgress', {
+        completed: progress.completedChunks,
+        total: progress.totalChunks,
+      });
     }
     injectTranslation(block.element, progress.translatedText, { plainText: true });
   }, [block.element]);
@@ -928,12 +932,12 @@ export function applyTranslationProgress(progress: {
 
 function invalidOutputMessage(reason: string): string {
   if (reason === 'wrong_target_script') {
-    return '번역 언어가 맞는지 확인하지 못했습니다.';
+    return uiText('languageCheckFailed');
   }
   if (reason === 'source_echo') {
-    return '원문이 그대로 반환되어 번역으로 표시하지 않았습니다.';
+    return uiText('sourceReturned');
   }
-  return '모델의 번역 결과를 확인하지 못했습니다.';
+  return uiText('modelResultFailed');
 }
 
 function showBlockError(
@@ -947,7 +951,7 @@ function showBlockError(
     errorCode === 'invalid_output'
       ? invalidOutputMessage(errorCode)
       : errorCode === 'input_too_long'
-        ? '문단이 너무 길어 번역하지 못했습니다.'
+        ? uiText('paragraphTooLong')
         : message;
   showError(block.element, userMessage, () => {
     if (gen !== translateGen || !sourceMatchesBlock(block)) return;
@@ -956,7 +960,7 @@ function showBlockError(
 }
 
 function cleanupLoaders(): void {
-  document.querySelectorAll('[data-b3rys-loader]').forEach((el) => el.remove());
+  document.querySelectorAll('[data-web-translate-loader]').forEach((el) => el.remove());
   activeBlockTranslations.clear();
 }
 
@@ -1044,7 +1048,7 @@ function isSiblingTarget(rule: ReturnType<typeof getSiteRule>, element: HTMLElem
 function injectNavItem(element: HTMLElement, sanitized: string, text: string): void {
   const span = document.createElement('span');
   span.setAttribute(DATA_ATTRS.TRANSLATED, 'true');
-  span.className = 'b3rys-translation-inline';
+  span.className = 'web-translate-translation-inline';
 
   const temp = document.createElement('div');
   temp.innerHTML = sanitized;
@@ -1078,18 +1082,18 @@ function injectAsSibling(element: HTMLElement, sanitized: string, truncated: boo
     // Element IS a flex/grid container (e.g. stat-item, faq-label) —
     // inject inside the child with the most text content
     const textChild = findLargestTextChild(element);
-    span.className = 'b3rys-translation-inline';
+    span.className = 'web-translate-translation-inline';
     const dest = textChild ?? element;
     markOriginalContent(element, dest);
     dest.appendChild(span);
   } else if (isFlexChild) {
     // Parent is flex — inject inside element as inline
-    span.className = 'b3rys-translation-inline';
+    span.className = 'web-translate-translation-inline';
     markOriginalContent(element);
     element.appendChild(span);
   } else {
     // Translation is a real sibling *outside* element — hide the whole element.
-    span.className = 'b3rys-translation';
+    span.className = 'web-translate-translation';
     if (truncated) applyTruncationStyles(span);
     element.setAttribute(DATA_ATTRS.ORIGINAL, 'true');
     element.after(span);
@@ -1102,7 +1106,7 @@ function injectForceReplace(element: HTMLElement, sanitized: string): void {
   const span = document.createElement('span');
   span.setAttribute(DATA_ATTRS.TRANSLATED, 'true');
   span.innerHTML = sanitized;
-  span.className = 'b3rys-translation';
+  span.className = 'web-translate-translation';
   span.style.marginTop = '0';
   element.appendChild(span);
 }
@@ -1120,16 +1124,16 @@ function injectBlock(
 
   const alwaysBlock = /^(H[1-6]|P|BLOCKQUOTE|LABEL)$/.test(element.tagName);
   if (!alwaysBlock && text.length <= INLINE_MAX_LENGTH) {
-    span.className = 'b3rys-translation-inline';
+    span.className = 'web-translate-translation-inline';
   } else {
-    span.className = 'b3rys-translation';
+    span.className = 'web-translate-translation';
   }
 
   // PRE remains globally excluded by the detector. If a site rule explicitly
   // opts a prose PRE into translation (antirez), preserve its paragraph breaks
   // without changing detection or injection behavior for ordinary code blocks.
   if (element.tagName === 'PRE') {
-    span.className = 'b3rys-translation';
+    span.className = 'web-translate-translation';
     span.style.whiteSpace = 'pre-wrap';
     span.style.display = 'block';
   }
@@ -1146,8 +1150,8 @@ function injectBlock(
     if (flexTarget && flexTarget !== element) {
       span.className =
         !alwaysBlock && text.length <= INLINE_MAX_LENGTH
-          ? 'b3rys-translation-inline'
-          : 'b3rys-translation';
+          ? 'web-translate-translation-inline'
+          : 'web-translate-translation';
       markOriginalContent(element, flexTarget);
       flexTarget.appendChild(span);
       return;
@@ -1169,7 +1173,7 @@ function injectBlock(
     soleLink !== null &&
     /^(flex|inline-flex|grid|inline-grid)$/.test(getComputedStyle(soleLink).display);
   if (soleLink && (soleLinkIsCard || !TRANSLATABLE_TAGS.has(element.tagName))) {
-    span.className = 'b3rys-translation';
+    span.className = 'web-translate-translation';
     const linkDest = (findTextLabel(soleLink, text) ??
       findLargestTextChild(soleLink)) as HTMLElement | null;
     // Fallback to the wrapper (full-width block), NEVER the grid <a> itself —
@@ -1190,7 +1194,7 @@ function injectBlock(
     !truncated &&
     (elStyle.whiteSpace === 'nowrap' || elStyle.whiteSpace === 'pre')
   ) {
-    span.className = 'b3rys-translation';
+    span.className = 'web-translate-translation';
     span.style.whiteSpace = 'normal';
     span.style.display = 'block';
     const br = document.createElement('br');
@@ -1290,11 +1294,11 @@ function hasActiveTruncation(el: HTMLElement): boolean {
  * walk element → target and mark only the *siblings* along that path, leaving the
  * ancestor chain to the translation visible.
  *
- * - Element children: add data-b3rys-original attribute directly (preserves flex layout)
- * - Text nodes: wrap in <span data-b3rys-original> (text nodes can't have attributes)
+ * - Element children: add data-web-translate-original attribute directly (preserves flex layout)
+ * - Text nodes: wrap in <span data-web-translate-original> (text nodes can't have attributes)
  *
  * parallel (A+가) mode is unaffected — the hide rule is scoped to
- * `body.b3rys-replace-mode`, so these attributes are inert there.
+ * `body.web-translate-replace-mode`, so these attributes are inert there.
  */
 function markOriginalContent(element: HTMLElement, target?: HTMLElement): void {
   const dest = target && element.contains(target) ? target : element;
@@ -1467,10 +1471,10 @@ function sanitizeNode(node: Node): void {
 
 function showLoading(element: HTMLElement): HTMLElement {
   const loader = document.createElement('span');
-  loader.className = 'b3rys-loading';
-  loader.setAttribute('data-b3rys-loader', 'true');
+  loader.className = 'web-translate-loading';
+  loader.setAttribute('data-web-translate-loader', 'true');
   loader.innerHTML =
-    '<span class="b3rys-loading-spinner" aria-hidden="true"></span><span data-b3rys-loader-label></span>';
+    '<span class="web-translate-loading-spinner" aria-hidden="true"></span><span data-web-translate-loader-label></span>';
   element.appendChild(loader);
   return loader;
 }
@@ -1478,16 +1482,16 @@ function showLoading(element: HTMLElement): HTMLElement {
 function showError(element: HTMLElement, message: string, onRetry?: () => void): void {
   removePriorTranslation(element);
   const errorEl = document.createElement('span');
-  errorEl.className = 'b3rys-error';
+  errorEl.className = 'web-translate-error';
   errorEl.setAttribute(DATA_ATTRS.TRANSLATED, 'true');
   const text = document.createElement('span');
-  text.textContent = `번역을 표시하지 않았습니다. ${message}`;
+  text.textContent = uiText('translationNotDisplayed', { message });
   errorEl.appendChild(text);
   if (onRetry) {
     const retry = document.createElement('button');
     retry.type = 'button';
-    retry.className = 'b3rys-error-retry';
-    retry.textContent = '이 문단 다시 번역';
+    retry.className = 'web-translate-error-retry';
+    retry.textContent = uiText('retryParagraph');
     retry.addEventListener('click', () => {
       retry.disabled = true;
       errorEl.remove();

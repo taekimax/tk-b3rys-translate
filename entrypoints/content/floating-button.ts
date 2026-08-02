@@ -1,13 +1,9 @@
 import type { FloatingButtonState, TranslationMode } from '@/types';
+import type { UiLanguage } from '@/utils/constants';
+import { getActiveUiLanguage, uiText } from '@/utils/ui-language';
 import css from './floating-button.css?raw';
 
 const ICONS = {
-  translate: `<svg viewBox="0 0 20 20" fill="none" class="icon icon-translate">
-    <text x="10" y="11" text-anchor="middle" font-family="-apple-system,sans-serif" font-size="14" font-weight="800" fill="currentColor">A</text>
-    <line x1="2" y1="13" x2="16" y2="13" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.2" stroke-linecap="round"/>
-    <polygon points="14,11 17,13 14,15" fill="currentColor" fill-opacity="0.45"/>
-    <text x="10" y="20" text-anchor="middle" font-family="-apple-system,'Apple SD Gothic Neo',sans-serif" font-size="11" font-weight="800" fill="currentColor" opacity="0.85">가</text>
-  </svg>`,
   loading: `<svg viewBox="0 0 20 20" fill="none" class="icon icon-loading">
     <path d="M10 3a7 7 0 0 1 7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   </svg>`,
@@ -20,11 +16,16 @@ const ICONS = {
   </svg>`,
 };
 
+function translateIcon(): string {
+  return `<img class="icon icon-translate app-button-icon" src="${chrome.runtime.getURL('app-button-icon.png')}" alt="" />`;
+}
+
 export interface FloatingButton {
   setState: (state: FloatingButtonState) => void;
   setProgress: (ratio: number) => void;
   setUsageGauge: (ratio: number) => void;
   setMode: (mode: TranslationMode) => void;
+  setLanguage: (language: UiLanguage) => void;
   onModeToggle: (callback: (mode: TranslationMode) => void) => void;
   showToast: (text: string) => void;
   show: () => void;
@@ -32,9 +33,14 @@ export interface FloatingButton {
   destroy: () => void;
 }
 
-export function createFloatingButton(onClick: () => void): FloatingButton {
+export function createFloatingButton(
+  onClick: () => void,
+  language: UiLanguage = getActiveUiLanguage(),
+): FloatingButton {
+  let currentLanguage = language;
+  let currentMode: TranslationMode = 'parallel';
   const host = document.createElement('div');
-  host.id = 'b3rys-translate-root';
+  host.id = 'web-translate-root';
   const shadow = host.attachShadow({ mode: 'closed' });
 
   const style = document.createElement('style');
@@ -43,11 +49,11 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
 
   // Wrapper (close + fab)
   const wrap = document.createElement('div');
-  wrap.className = 'b3rys-wrap';
+  wrap.className = 'web-translate-wrap';
 
   // Close button
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'b3rys-close';
+  closeBtn.className = 'web-translate-close';
   closeBtn.innerHTML = `<svg viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -58,26 +64,28 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
   // FAB
   const fab = document.createElement('button');
   fab.type = 'button';
-  fab.setAttribute('aria-label', 'Translate page');
-  fab.title = 'Translate page';
-  fab.className = 'b3rys-fab';
+  fab.setAttribute('aria-label', uiText('translatePage', currentLanguage));
+  fab.title = uiText('translatePage', currentLanguage);
+  fab.className = 'web-translate-fab';
   fab.setAttribute('data-state', 'idle');
   fab.innerHTML = `
-    ${ICONS.translate}
+    ${translateIcon()}
     ${ICONS.loading}
     ${ICONS.done}
     ${ICONS.error}
-    <svg class="b3rys-progress" viewBox="0 0 40 40">
+    <svg class="web-translate-progress" viewBox="0 0 40 40">
       <circle cx="20" cy="20" r="19"/>
     </svg>
-    <div class="b3rys-usage-gauge"></div>
+    <div class="web-translate-usage-gauge"></div>
   `;
 
   // Mode toggle button
   const modeBtn = document.createElement('button');
-  modeBtn.className = 'b3rys-mode-toggle';
+  modeBtn.className = 'web-translate-mode-toggle';
+  modeBtn.type = 'button';
+  modeBtn.setAttribute('aria-label', uiText('toggleMode', currentLanguage));
+  modeBtn.title = uiText('toggleMode', currentLanguage);
   modeBtn.textContent = 'A+가';
-  let currentMode: TranslationMode = 'parallel';
   let modeToggleCallback: ((mode: TranslationMode) => void) | null = null;
   modeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -133,8 +141,10 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
     if (!isDragging) onClick();
   });
 
-  const progressCircle = shadow.querySelector('.b3rys-progress circle') as SVGCircleElement | null;
-  const usageGauge = shadow.querySelector('.b3rys-usage-gauge') as HTMLElement;
+  const progressCircle = shadow.querySelector(
+    '.web-translate-progress circle',
+  ) as SVGCircleElement | null;
+  const usageGauge = shadow.querySelector('.web-translate-usage-gauge') as HTMLElement;
 
   return {
     setState(state: FloatingButtonState) {
@@ -172,12 +182,22 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
       modeBtn.textContent = mode === 'parallel' ? 'A+가' : '가';
     },
 
+    setLanguage(language: UiLanguage) {
+      currentLanguage = language;
+      const label = uiText('translatePage', currentLanguage);
+      fab.setAttribute('aria-label', label);
+      fab.title = label;
+      const modeLabel = uiText('toggleMode', currentLanguage);
+      modeBtn.setAttribute('aria-label', modeLabel);
+      modeBtn.title = modeLabel;
+    },
+
     onModeToggle(callback: (mode: TranslationMode) => void) {
       modeToggleCallback = callback;
     },
 
     showToast(text: string) {
-      const existing = shadow.querySelector('.b3rys-toast');
+      const existing = shadow.querySelector('.web-translate-toast');
       // Same message already on screen → leave it running. Re-creating the
       // element restarts the fade-in animation, which reads as flicker when
       // showToast fires repeatedly (e.g. an invalidated context on every click).
@@ -187,7 +207,7 @@ export function createFloatingButton(onClick: () => void): FloatingButton {
       }
 
       const toast = document.createElement('div');
-      toast.className = 'b3rys-toast';
+      toast.className = 'web-translate-toast';
       toast.textContent = text;
       fab.appendChild(toast);
 

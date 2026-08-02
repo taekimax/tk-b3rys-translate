@@ -1,5 +1,5 @@
 /**
- * b3rys ASCII Test Reporter — Vitest 4.x
+ * web-translate ASCII Test Reporter — Vitest 4.x
  *
  * 리팩토링 중 테스트 진행 상황을 터미널에서 보기 좋게 표시.
  *
@@ -46,7 +46,7 @@ export default class AsciiReporter {
     const banner = [
       '',
       `${DIM}╔${'═'.repeat(54)}╗${RESET}`,
-      `${DIM}║${RESET}  ${GREEN}${BOLD}b3rys translate${RESET} ${DIM}—${RESET} Test Runner ${DIM}${'·'.repeat(22)}║${RESET}`,
+      `${DIM}║${RESET}  ${GREEN}${BOLD}web-translate${RESET} ${DIM}—${RESET} Test Runner ${DIM}${'·'.repeat(22)}║${RESET}`,
       `${DIM}╚${'═'.repeat(54)}╝${RESET}`,
       '',
     ];

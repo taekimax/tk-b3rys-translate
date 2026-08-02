@@ -40,7 +40,7 @@ export function startOverlay(
 
   videoEl = document.querySelector('video');
   if (!videoEl) {
-    console.warn('[b3rys] No video element found for overlay');
+    console.warn('[web-translate] No video element found for overlay');
     return;
   }
 
@@ -50,18 +50,18 @@ export function startOverlay(
   // Create overlay inside the player
   const player = document.getElementById('movie_player');
   if (!player) {
-    console.warn('[b3rys] No movie_player element for overlay');
+    console.warn('[web-translate] No movie_player element for overlay');
     return;
   }
 
   overlayEl = document.createElement('div');
-  overlayEl.className = 'b3rys-subtitle-overlay';
+  overlayEl.className = 'web-translate-subtitle-overlay';
 
   originalEl = document.createElement('div');
-  originalEl.className = 'b3rys-subtitle-line b3rys-subtitle-original';
+  originalEl.className = 'web-translate-subtitle-line web-translate-subtitle-original';
 
   translatedEl = document.createElement('div');
-  translatedEl.className = 'b3rys-subtitle-line b3rys-subtitle-translated';
+  translatedEl.className = 'web-translate-subtitle-line web-translate-subtitle-translated';
 
   overlayEl.appendChild(originalEl);
   overlayEl.appendChild(translatedEl);
@@ -77,7 +77,7 @@ export function startOverlay(
   // Start rAF-driven display loop for smooth subtitle updates
   startDisplayLoop();
 
-  console.log('[b3rys] Custom subtitle overlay started');
+  console.log('[web-translate] Custom subtitle overlay started');
 }
 
 /**
@@ -87,9 +87,9 @@ export function startOverlay(
 export function flashOverlayNotice(message: string): void {
   const player = document.getElementById('movie_player');
   if (!player) return;
-  player.querySelector('.b3rys-yt-notice')?.remove();
+  player.querySelector('.web-translate-yt-notice')?.remove();
   const el = document.createElement('div');
-  el.className = 'b3rys-yt-notice';
+  el.className = 'web-translate-yt-notice';
   el.textContent = message;
   player.appendChild(el);
   setTimeout(() => el.remove(), 3500);
@@ -115,7 +115,7 @@ export function stopOverlay(): void {
   }
   overlayEl?.remove();
   // A notice still inside its 3.5s timer would otherwise float over the next video.
-  document.getElementById('movie_player')?.querySelector('.b3rys-yt-notice')?.remove();
+  document.getElementById('movie_player')?.querySelector('.web-translate-yt-notice')?.remove();
   removeFontSizeStyle();
   overlayEl = null;
   originalEl = null;
@@ -220,10 +220,10 @@ function updateDisplay(): void {
 
   if (translation) {
     translatedEl.textContent = decodeEntities(translation);
-    translatedEl.classList.remove('b3rys-subtitle-loading');
+    translatedEl.classList.remove('web-translate-subtitle-loading');
   } else {
     translatedEl.textContent = '...';
-    translatedEl.classList.add('b3rys-subtitle-loading');
+    translatedEl.classList.add('web-translate-subtitle-loading');
   }
   translatedEl.style.display = displayMode === 'en' ? 'none' : '';
 }
@@ -265,7 +265,7 @@ function decodeEntities(text: string): string {
   return el.value;
 }
 
-const FONT_STYLE_ID = 'b3rys-subtitle-font';
+const FONT_STYLE_ID = 'web-translate-subtitle-font';
 let playerResizeObserver: ResizeObserver | null = null;
 
 /**
@@ -280,7 +280,7 @@ function updateFontSize(): void {
   const style = document.getElementById(FONT_STYLE_ID);
   if (!player || !style) return;
   const px = Math.round(Math.min(38, Math.max(16, player.clientWidth * 0.023)));
-  style.textContent = `.b3rys-subtitle-line { font-size: ${px}px !important; }`;
+  style.textContent = `.web-translate-subtitle-line { font-size: ${px}px !important; }`;
 }
 
 /**
@@ -315,7 +315,7 @@ function removeFontSizeStyle(): void {
  * Hide or restore YouTube's native caption windows via a style element.
  */
 function setYouTubeCCHidden(hidden: boolean): void {
-  const id = 'b3rys-hide-yt-cc';
+  const id = 'web-translate-hide-yt-cc';
   const existing = document.getElementById(id);
 
   if (hidden && !existing) {

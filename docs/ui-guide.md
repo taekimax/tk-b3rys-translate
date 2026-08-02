@@ -37,7 +37,7 @@
         │ [A→가] │        │  [↻]    │          │  [✓]   │
         └────────┘        └─────────┘          └────────┘
            ↑    ↑           │    │                │
-           │    │     취소   │    │  API 에러       │ 클릭
+           │    │     취소   │    │  native 에러    │ 클릭
            │    └───────────┘    │                │ remove
            │                     ▼                │ All
            │               ┌─────────┐            │
@@ -94,7 +94,7 @@ FAB 하단의 사용량 표시:
 
 ### Parallel (병행) 모드 — `A+가`
 
-원문과 번역을 함께 표시. CSS: `[data-b3rys-original]` 보임.
+원문과 번역을 함께 표시. CSS: `[data-web-translate-original]` 보임.
 
 ```
 Before                          After
@@ -111,15 +111,15 @@ DOM:
 
 ```html
 <p>
-  <span data-b3rys-original>The quick brown fox...</span>
+  <span data-web-translate-original>The quick brown fox...</span>
   <!-- 표시 -->
-  <span data-b3rys-translated class="b3rys-translation">빠른 갈색 여우가...</span>
+  <span data-web-translate-translated class="web-translate-translation">빠른 갈색 여우가...</span>
 </p>
 ```
 
 ### Replace (대치) 모드 — `가`
 
-원문을 숨기고 번역만 표시. CSS: `body.b3rys-replace-mode [data-b3rys-original] { display: none }`.
+원문을 숨기고 번역만 표시. CSS: `body.web-translate-replace-mode [data-web-translate-original] { display: none }`.
 
 ```
 Before                          After
@@ -134,8 +134,8 @@ DOM (동일 구조, CSS만 전환):
 
 ```html
 <p>
-  <span data-b3rys-original style="display:none">The quick brown fox...</span>
-  <span data-b3rys-translated class="b3rys-translation" style="margin-top:0"
+  <span data-web-translate-original style="display:none">The quick brown fox...</span>
+  <span data-web-translate-translated class="web-translate-translation" style="margin-top:0"
     >빠른 갈색 여우가...</span
   >
 </p>
@@ -146,17 +146,17 @@ DOM (동일 구조, CSS만 전환):
 ```
 사용자 A+가/가 토글 클릭
   │
-  ├─ body.classList.toggle('b3rys-replace-mode')
+  ├─ body.classList.toggle('web-translate-replace-mode')
   │
   ├─ 병행 모드:
   │   body 에 클래스 없음
-  │   [data-b3rys-original] → display: 보임
-  │   [data-b3rys-translated] → margin-top: 4px (원문 아래)
+  │   [data-web-translate-original] → display: 보임
+  │   [data-web-translate-translated] → margin-top: 4px (원문 아래)
   │
   └─ 대치 모드:
-      body.b3rys-replace-mode
-      [data-b3rys-original] → display: none
-      [data-b3rys-translated] → margin-top: 0 (원문 자리를 대체)
+      body.web-translate-replace-mode
+      [data-web-translate-original] → display: none
+      [data-web-translate-translated] → margin-top: 0 (원문 자리를 대체)
 ```
 
 ---
@@ -206,7 +206,9 @@ DOM:
     <svg>...</svg>
     <span class="label">
       Public profile
-      <span data-b3rys-translated class="b3rys-translation-inline">공개 프로필</span>
+      <span data-web-translate-translated class="web-translate-translation-inline"
+        >공개 프로필</span
+      >
     </span>
   </a>
 </li>
@@ -225,8 +227,8 @@ Before                          After
 
 DOM 구조:
 ┌──────────────────────────────────────────────────────┐
-│ <span data-b3rys-original>Great article!</span>      │
-│ <span data-b3rys-translated>좋은 글이네요!</span>     │ ← 형제로 삽입
+│ <span data-web-translate-original>Great article!</span>      │
+│ <span data-web-translate-translated>좋은 글이네요!</span>     │ ← 형제로 삽입
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -245,10 +247,10 @@ Before                               After (parallel)
 
 After (replace)                      markOriginalContent 동작:
 ┌──────────────────────────────┐     ┌──────────────────────────┐
-│ 내일 오후 3시에 회의           │     │ <span data-b3rys-original> │
+│ 내일 오후 3시에 회의           │     │ <span data-web-translate-original> │
 │ 안녕하세요, 리마인더...        │     │   Meeting tomorrow...     │
 └──────────────────────────────┘     │ </span>                   │
-                                     │ <span data-b3rys-translated>│
+                                     │ <span data-web-translate-translated>│
                                      │   내일 오후 3시에 회의      │
                                      │ </span>                   │
                                      └──────────────────────────┘
@@ -281,7 +283,7 @@ Before                          After
 │ Read more    │                │ Read more 더 보기         │
 └──────────────┘                └──────────────────────────┘
                                          ↑
-                                class: b3rys-translation-inline
+                                class: web-translate-translation-inline
 ```
 
 **제목 (H1-H6)**: 항상 블록으로 아래에 표시 (길이 무관)
@@ -293,7 +295,7 @@ Before                          After
 └──────────────┘                │ 요약          │
                                 └──────────────┘
                                       ↑
-                                class: b3rys-translation
+                                class: web-translate-translation
 ```
 
 ---
@@ -315,8 +317,8 @@ Before markOriginalContent():
 After markOriginalContent():
 ┌──────────────────────────────────────────────────┐
 │ <p>                                              │
-│   <span data-b3rys-original>"Hello "</span>      │ ← 텍스트 노드 → span 래핑
-│   <a data-b3rys-original>world</a>               │ ← 기존 요소에 속성 추가
+│   <span data-web-translate-original>"Hello "</span>      │ ← 텍스트 노드 → span 래핑
+│   <a data-web-translate-original>world</a>               │ ← 기존 요소에 속성 추가
 │   <img src="..">                                 │ ← 비텍스트는 그대로
 │ </p>                                             │
 └──────────────────────────────────────────────────┘
@@ -324,15 +326,15 @@ After markOriginalContent():
 After 번역 삽입:
 ┌──────────────────────────────────────────────────┐
 │ <p>                                              │
-│   <span data-b3rys-original>"Hello "</span>      │
-│   <a data-b3rys-original>world</a>               │
+│   <span data-web-translate-original>"Hello "</span>      │
+│   <a data-web-translate-original>world</a>               │
 │   <img src="..">                                 │
-│   <span data-b3rys-translated>안녕 세계</span>    │ ← 번역문 추가
+│   <span data-web-translate-translated>안녕 세계</span>    │ ← 번역문 추가
 │ </p>                                             │
 └──────────────────────────────────────────────────┘
 
-병행 모드: [data-b3rys-original] 표시 + [data-b3rys-translated] 표시
-대치 모드: [data-b3rys-original] 숨김 + [data-b3rys-translated] 표시
+병행 모드: [data-web-translate-original] 표시 + [data-web-translate-translated] 표시
+대치 모드: [data-web-translate-original] 숨김 + [data-web-translate-translated] 표시
 ```
 
 ---
@@ -507,20 +509,19 @@ FAB off → 선택 번역 비활성 (트리거 버튼 표시 안 됨)
 
 ```
 ┌────────────────────────────────┐
-│  b3rys translate  ⚙ Settings  │
+│  web-translate  ⚙ Settings  │
 ├────────────────────────────────┤
 │                                │
-│  번역 엔진:                     │
+│  로컬 MLX 모델:                 │
 │  ┌──────────────────────────┐  │
-│  │ ● Gemini 3.1 Flash Lite  │  │
-│  │ ○ GPT-4.1 Nano           │  │
-│  │ ○ Claude Haiku 4.5       │  │
+│  │ ● Hy-MT2 7B (Q4)         │  │
+│  │ ○ Hy-MT2 1.8B (Q4)       │  │
+│  │ ○ TranslateGemma 4B (Q4) │  │
+│  │ ○ TranslateGemma 12B(Q4) │  │
 │  └──────────────────────────┘  │
 │                                │
-│  API Key:                      │
-│  ┌──────────────────────────┐  │
-│  │ ••••••••••••••••         │  │
-│  └──────────────────────────┘  │
+│  모델 상태: 준비됨             │
+│  [모델 정보 · 라이선스]        │
 │                                │
 │  ┌────┐  번역 자동 시작         │
 │  │ ✓  │  (새 페이지 방문 시)    │
@@ -530,14 +531,13 @@ FAB off → 선택 번역 비활성 (트리거 버튼 표시 안 됨)
 │  │ ✓  │                        │
 │  └────┘                        │
 │                                │
-│  ─────── 비용 ────────         │
-│  이번 달: $0.42 / $5.00       │
-│  ██████████░░░░░░  8%          │
-│  [사용량 리셋]                  │
+│  번역은 이 Mac에서 처리됩니다. │
+│  외부 LLM API를 사용하지 않음  │
 │                                │
 └────────────────────────────────┘
 ```
 
-- 엔진별 API 키 입력 (키가 없으면 엔진 선택 불가)
-- 사용량은 chrome.storage.sync로 기기 간 동기화
-- 비용 한도 초과 시 번역 차단 + FAB에 경고
+- 모델을 선택하면 파일이 없을 때 고정 revision 자동 다운로드를 시작함
+- TranslateGemma는 Google Gemma Terms of Use와 사용 제한 확인 후 다운로드함
+- 모델 정보 표에서 source revision과 license 링크를 확인
+- 모델 파일과 번역 요청은 로컬 macOS native host에서 처리

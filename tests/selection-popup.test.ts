@@ -131,22 +131,22 @@ describe('parseWordResponse', () => {
 describe('highlightWord', () => {
   it('wraps word in highlight span', () => {
     const result = highlightWord('The algorithm works', 'algorithm');
-    expect(result).toBe('The <span class="b3rys-sel-highlight">algorithm</span> works');
+    expect(result).toBe('The <span class="web-translate-sel-highlight">algorithm</span> works');
   });
 
   it('is case insensitive', () => {
     const result = highlightWord('The Algorithm works', 'algorithm');
-    expect(result).toContain('<span class="b3rys-sel-highlight">Algorithm</span>');
+    expect(result).toContain('<span class="web-translate-sel-highlight">Algorithm</span>');
   });
 
   it('escapes regex special characters', () => {
     const result = highlightWord('Use c++ for speed', 'c++');
-    expect(result).toContain('<span class="b3rys-sel-highlight">c++</span>');
+    expect(result).toContain('<span class="web-translate-sel-highlight">c++</span>');
   });
 
   it('highlights multiple occurrences', () => {
     const result = highlightWord('the cat sat on the mat', 'the');
-    const count = (result.match(/b3rys-sel-highlight/g) || []).length;
+    const count = (result.match(/web-translate-sel-highlight/g) || []).length;
     expect(count).toBe(2);
   });
 });

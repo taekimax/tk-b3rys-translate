@@ -1,7 +1,7 @@
 import type { TranslateResult, TranslationEngine } from './types';
 import type { ModelDownloadItem, ModelStatusResponse, LocalModelStatus } from '../messaging';
 
-const HOST_NAME = 'com.b3rys.translate.local_mlx';
+const HOST_NAME = 'com.webtranslate.translate.local_mlx';
 
 interface NativeTranslationResponse {
   requestId: string;

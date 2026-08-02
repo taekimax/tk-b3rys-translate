@@ -1,10 +1,13 @@
 import type { SubtitleDisplayMode } from './subtitle-overlay';
+import type { UiLanguage } from '@/utils/constants';
+import { getActiveUiLanguage, uiText } from '@/utils/ui-language';
 
 export type YtButtonState = 'idle' | 'loading' | 'active' | 'error' | 'info';
 
 export interface YtPlayerButton {
   setState(state: YtButtonState, title?: string): void;
   setMode(mode: SubtitleDisplayMode): void;
+  setLanguage(language: UiLanguage): void;
   show(): void;
   hide(): void;
   destroy(): void;
@@ -19,25 +22,34 @@ const MODE_LABELS: Record<SubtitleDisplayMode, string> = {
   ko: '가',
 };
 
-const MODE_TITLES: Record<SubtitleDisplayMode, string> = {
-  both: '원문+번역 (클릭: 원문만)',
-  en: '원문만 (클릭: 번역만)',
-  ko: '번역만 (클릭: 끄기)',
-};
+function modeTitle(mode: SubtitleDisplayMode, language: UiLanguage): string {
+  const key =
+    mode === 'both' ? 'ytModeBoth' : mode === 'en' ? 'ytModeOriginal' : 'ytModeTranslation';
+  return uiText(key, language);
+}
 
-const TITLES: Record<YtButtonState, string> = {
-  idle: 'b3rys 번역 자막',
-  loading: '번역 중...',
-  active: '원문+번역 (클릭: 원문만)',
-  error: '번역 실패 (클릭: 재시도)',
-  info: '자막 번역 불가',
-};
+function stateTitle(state: YtButtonState, language: UiLanguage): string {
+  const key =
+    state === 'idle'
+      ? 'ytIdleTitle'
+      : state === 'loading'
+        ? 'ytLoading'
+        : state === 'active'
+          ? 'ytActive'
+          : state === 'error'
+            ? 'ytError'
+            : 'ytInfo';
+  return uiText(key, language);
+}
 
 /**
  * Inject a translate button into YouTube's player controls bar (.ytp-right-controls).
  * Waits for the controls to appear via MutationObserver if not yet in DOM.
  */
-export function injectYtPlayerButton(onClick: () => void): Promise<YtPlayerButton> {
+export function injectYtPlayerButton(
+  onClick: () => void,
+  language: UiLanguage = getActiveUiLanguage(),
+): Promise<YtPlayerButton> {
   return new Promise((resolve) => {
     let resolved = false;
 
@@ -46,12 +58,12 @@ export function injectYtPlayerButton(onClick: () => void): Promise<YtPlayerButto
       if (!controls) return false;
 
       // Remove stale button from previous injection
-      controls.querySelector('.b3rys-yt-btn')?.remove();
+      controls.querySelector('.web-translate-yt-btn')?.remove();
 
       const btn = document.createElement('button');
-      btn.className = 'b3rys-yt-btn';
-      btn.setAttribute('data-b3rys-state', 'idle');
-      btn.title = TITLES.idle;
+      btn.className = 'web-translate-yt-btn';
+      btn.setAttribute('data-web-translate-state', 'idle');
+      btn.title = stateTitle('idle', language);
       btn.textContent = LABEL_IDLE;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -61,19 +73,31 @@ export function injectYtPlayerButton(onClick: () => void): Promise<YtPlayerButto
 
       // Insert at the start of right controls (safe — no insertBefore pitfalls)
       controls.prepend(btn);
-      console.log('[b3rys] Player translate button injected');
+      console.log('[web-translate] Player translate button injected');
 
       if (!resolved) {
         resolved = true;
+        let currentLanguage = language;
+        let currentState: YtButtonState = 'idle';
+        let currentMode: SubtitleDisplayMode = 'both';
         resolve({
           setState(state: YtButtonState, title?: string) {
-            btn.setAttribute('data-b3rys-state', state);
-            btn.title = title ?? TITLES[state];
+            currentState = state;
+            btn.setAttribute('data-web-translate-state', state);
+            btn.title = title ?? stateTitle(state, currentLanguage);
             btn.textContent = state === 'loading' ? LABEL_LOADING : LABEL_IDLE;
           },
           setMode(mode: SubtitleDisplayMode) {
+            currentMode = mode;
             btn.textContent = MODE_LABELS[mode];
-            btn.title = MODE_TITLES[mode];
+            btn.title = modeTitle(mode, currentLanguage);
+          },
+          setLanguage(nextLanguage: UiLanguage) {
+            currentLanguage = nextLanguage;
+            btn.title =
+              currentState === 'active' && currentMode !== 'both'
+                ? modeTitle(currentMode, currentLanguage)
+                : stateTitle(currentState, currentLanguage);
           },
           show() {
             btn.style.removeProperty('display');
@@ -101,8 +125,15 @@ export function injectYtPlayerButton(onClick: () => void): Promise<YtPlayerButto
       obs.disconnect();
       if (!resolved) {
         resolved = true;
-        console.warn('[b3rys] Failed to inject player button (timeout)');
-        resolve({ setState() {}, setMode() {}, show() {}, hide() {}, destroy() {} });
+        console.warn('[web-translate] Failed to inject player button (timeout)');
+        resolve({
+          setState() {},
+          setMode() {},
+          setLanguage() {},
+          show() {},
+          hide() {},
+          destroy() {},
+        });
       }
     }, 15000);
   });

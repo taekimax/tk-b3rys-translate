@@ -12,7 +12,7 @@ export default defineContentScript({
   runAt: 'document_start',
 
   main() {
-    console.log('[b3rys-bridge] MAIN world bridge loaded');
+    console.log('[web-translate-bridge] MAIN world bridge loaded');
 
     /**
      * The live player's response, which follows SPA navigation.
@@ -35,11 +35,11 @@ export default defineContentScript({
 
     // --- 1) Player response request handler ---
     window.addEventListener('message', (e: MessageEvent) => {
-      if (e.data?.type === '__b3rys_get_player_response') {
+      if (e.data?.type === '__web_translate_get_player_response') {
         const data = readPlayerResponse();
-        console.log('[b3rys-bridge] Player response:', data ? 'found' : 'null');
+        console.log('[web-translate-bridge] Player response:', data ? 'found' : 'null');
         window.postMessage({
-          type: '__b3rys_player_response',
+          type: '__web_translate_player_response',
           data: data ? JSON.parse(JSON.stringify(data)) : null,
         });
       }
@@ -57,8 +57,10 @@ export default defineContentScript({
           const clone = response.clone();
           const text = await clone.text();
           if (text) {
-            console.log(`[b3rys-bridge] Intercepted fetch timedtext: length=${text.length}`);
-            window.postMessage({ type: '__b3rys_timedtext_intercepted', url, text });
+            console.log(
+              `[web-translate-bridge] Intercepted fetch timedtext: length=${text.length}`,
+            );
+            window.postMessage({ type: '__web_translate_timedtext_intercepted', url, text });
           }
         } catch {
           /* ignore */
@@ -78,20 +80,20 @@ export default defineContentScript({
       url: string | URL,
       ...rest: unknown[]
     ) {
-      (this as unknown as Record<string, unknown>).__b3rysUrl = String(url);
+      (this as unknown as Record<string, unknown>).__web_translate_url = String(url);
       return origOpen.apply(this, [method, url, ...rest] as unknown as Parameters<typeof origOpen>);
     };
 
     OrigXHR.prototype.send = function (this: XMLHttpRequest, ...args: unknown[]) {
-      const xhrUrl = (this as unknown as Record<string, string>).__b3rysUrl ?? '';
+      const xhrUrl = (this as unknown as Record<string, string>).__web_translate_url ?? '';
       if (xhrUrl.includes('/api/timedtext')) {
         this.addEventListener('load', () => {
           if (this.status === 200 && this.responseText) {
             console.log(
-              `[b3rys-bridge] Intercepted XHR timedtext: length=${this.responseText.length}`,
+              `[web-translate-bridge] Intercepted XHR timedtext: length=${this.responseText.length}`,
             );
             window.postMessage({
-              type: '__b3rys_timedtext_intercepted',
+              type: '__web_translate_timedtext_intercepted',
               url: xhrUrl,
               text: this.responseText,
             });
@@ -103,23 +105,28 @@ export default defineContentScript({
 
     // --- 3) Direct fetch handler from isolated world ---
     window.addEventListener('message', (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_fetch_request') return;
+      if (e.data?.type !== '__web_translate_fetch_request') return;
       const { url, requestId } = e.data;
-      console.log('[b3rys-bridge] Direct fetch:', url.substring(0, 120));
+      console.log('[web-translate-bridge] Direct fetch:', url.substring(0, 120));
 
       // Use original fetch (not monkey-patched) to avoid recursion
       origFetch(url, { credentials: 'include' })
         .then(async (r) => {
           const text = await r.text();
           console.log(
-            `[b3rys-bridge] Direct fetch done: status=${r.status}, length=${text.length}`,
+            `[web-translate-bridge] Direct fetch done: status=${r.status}, length=${text.length}`,
           );
-          window.postMessage({ type: '__b3rys_fetch_response', requestId, text, status: r.status });
+          window.postMessage({
+            type: '__web_translate_fetch_response',
+            requestId,
+            text,
+            status: r.status,
+          });
         })
         .catch((err) => {
-          console.error('[b3rys-bridge] Direct fetch error:', err);
+          console.error('[web-translate-bridge] Direct fetch error:', err);
           window.postMessage({
-            type: '__b3rys_fetch_response',
+            type: '__web_translate_fetch_response',
             requestId,
             error: String(err),
             status: 0,
@@ -134,12 +141,12 @@ export default defineContentScript({
     let ccToggleTimer: ReturnType<typeof setTimeout> | null = null;
 
     window.addEventListener('message', (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_trigger_captions') return;
+      if (e.data?.type !== '__web_translate_trigger_captions') return;
 
       try {
         const player = document.getElementById('movie_player');
         if (!player) {
-          console.log('[b3rys-bridge] No movie_player element');
+          console.log('[web-translate-bridge] No movie_player element');
           return;
         }
 
@@ -148,7 +155,7 @@ export default defineContentScript({
         // Load the captions module first
         if (typeof p.loadModule === 'function') {
           p.loadModule('captions');
-          console.log('[b3rys-bridge] Loaded captions module');
+          console.log('[web-translate-bridge] Loaded captions module');
         }
 
         // If CC is already on, no need to toggle
@@ -156,7 +163,7 @@ export default defineContentScript({
         const isOn = ccBtn?.getAttribute('aria-pressed') === 'true';
 
         if (isOn) {
-          console.log('[b3rys-bridge] Captions already active');
+          console.log('[web-translate-bridge] Captions already active');
           didToggleCC = false;
           return;
         }
@@ -172,26 +179,26 @@ export default defineContentScript({
           if (p2 && typeof p2.toggleSubtitles === 'function') {
             p2.toggleSubtitles();
             didToggleCC = true;
-            console.log('[b3rys-bridge] Toggled subtitles on');
+            console.log('[web-translate-bridge] Toggled subtitles on');
           }
         }, 500);
       } catch (err) {
-        console.error('[b3rys-bridge] Trigger captions error:', err);
+        console.error('[web-translate-bridge] Trigger captions error:', err);
       }
     });
 
     // --- 5) Restore captions: turn CC back off if we toggled it on ---
     window.addEventListener('message', (e: MessageEvent) => {
-      if (e.data?.type !== '__b3rys_restore_captions') return;
+      if (e.data?.type !== '__web_translate_restore_captions') return;
 
       if (ccToggleTimer) {
         clearTimeout(ccToggleTimer);
         ccToggleTimer = null;
-        console.log('[b3rys-bridge] Cancelled pending CC toggle');
+        console.log('[web-translate-bridge] Cancelled pending CC toggle');
       }
 
       if (!didToggleCC) {
-        console.log('[b3rys-bridge] CC was not toggled by us, skipping restore');
+        console.log('[web-translate-bridge] CC was not toggled by us, skipping restore');
         return;
       }
 
@@ -202,10 +209,10 @@ export default defineContentScript({
         > | null;
         if (player && typeof player.toggleSubtitles === 'function') {
           player.toggleSubtitles();
-          console.log('[b3rys-bridge] Restored CC to off');
+          console.log('[web-translate-bridge] Restored CC to off');
         }
       } catch (err) {
-        console.error('[b3rys-bridge] Restore captions error:', err);
+        console.error('[web-translate-bridge] Restore captions error:', err);
       }
 
       didToggleCC = false;

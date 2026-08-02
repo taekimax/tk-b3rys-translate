@@ -16,7 +16,16 @@ import {
 } from '@/utils/translation-cache';
 import { migrateStorage } from '@/utils/storage';
 import { DEFAULT_SOURCE_LANG, DEFAULT_TARGET_LANG, LANG_STORAGE_KEY } from '@/utils/constants';
-import { SELECTED_MODEL_KEY, resolveSelectedModel } from '@/utils/models';
+import {
+  DEFAULT_MODEL_ID,
+  isPublicModel,
+  requiresModelTermsAcceptance,
+  SELECTED_MODEL_KEY,
+  resolveSelectedModel,
+  TRANSLATEGEMMA_TERMS_ACCEPTED_KEY,
+  TRANSLATEGEMMA_TERMS_VERSION,
+  type ModelId,
+} from '@/utils/models';
 import {
   buildTranslationCachePrefix,
   buildTranslationContext,
@@ -194,8 +203,12 @@ async function processDownloadQueue(): Promise<void> {
 }
 
 export default defineBackground(() => {
-  void loadCache();
-  void migrateStorage();
+  // Complete the namespace migration before loading the cache so an existing
+  // installation does not race the copy and start with an empty in-memory map.
+  void migrateStorage().then(
+    () => loadCache(),
+    () => loadCache(),
+  );
   // A reload interrupts native messaging. Clear the old transient queue so it
   // cannot be rendered as active work by the newly started extension.
   downloadManagerReady = clearPersistedDownloadQueue();
@@ -229,10 +242,30 @@ export default defineBackground(() => {
       return true;
     }
     if (message.type === 'DOWNLOAD_MODEL') {
+      if (!isPublicModel(message.modelId)) {
+        sendResponse({
+          success: false,
+          error: 'This model is not enabled in the public catalog.',
+          errorCode: 'model_not_available',
+        });
+        return false;
+      }
       void downloadManagerReady
-        .then(() => requestModelDownload(message.modelId))
+        .then(async () => {
+          if (!(await hasModelAccess(message.modelId))) {
+            sendResponse({
+              success: false,
+              error: 'Accept the TranslateGemma terms before downloading this model.',
+              errorCode: 'terms_required',
+            });
+            return undefined;
+          }
+          return requestModelDownload(message.modelId);
+        })
         .then(
-          (status) => sendResponse({ success: true, ...status }),
+          (status) => {
+            if (status) sendResponse({ success: true, ...status });
+          },
           (error) => {
             const code = error instanceof NativeTranslationError ? error.code : 'runtime_error';
             sendResponse({
@@ -312,7 +345,15 @@ async function resolveSourceLang(): Promise<string> {
 
 async function selectedModel(): Promise<ReturnType<typeof resolveSelectedModel>> {
   const data = await chrome.storage.local.get(SELECTED_MODEL_KEY);
-  return resolveSelectedModel(data[SELECTED_MODEL_KEY] as string | undefined);
+  const model = resolveSelectedModel(data[SELECTED_MODEL_KEY] as string | undefined);
+  return (await hasModelAccess(model)) ? model : DEFAULT_MODEL_ID;
+}
+
+async function hasModelAccess(modelId: ModelId | string | undefined): Promise<boolean> {
+  if (!isPublicModel(modelId)) return false;
+  if (!requiresModelTermsAcceptance(modelId)) return true;
+  const data = await chrome.storage.local.get(TRANSLATEGEMMA_TERMS_ACCEPTED_KEY);
+  return data[TRANSLATEGEMMA_TERMS_ACCEPTED_KEY] === TRANSLATEGEMMA_TERMS_VERSION;
 }
 
 async function resolvePageContext(): Promise<TranslationContext> {
@@ -334,6 +375,7 @@ async function handleCacheLookup(
   const effectiveTarget = isValidPageContext(context)
     ? effectiveContext.targetLang
     : (target ?? effectiveContext.targetLang);
+  if (!(await hasModelAccess(effectiveContext.modelId))) return { translations: [] };
   const prefix = buildTranslationCachePrefix(
     effectiveContext.sourceLang,
     effectiveTarget,
@@ -368,6 +410,14 @@ async function handleTranslateBatch(
   const effectiveTarget = pageContext?.targetLang ?? (await resolveTargetLang(targetLang));
   const effectiveSource = pageContext?.sourceLang ?? sourceLang ?? DEFAULT_SOURCE_LANG;
   const lang = { sourceLang: effectiveSource, targetLang: effectiveTarget };
+
+  if (!(await hasModelAccess(modelId))) {
+    return {
+      translations: [],
+      error: 'Accept the TranslateGemma terms before using this model.',
+      errorCode: 'terms_required',
+    };
+  }
 
   // Segment output includes positional context and is intentionally not shared
   // through the page cache; every other mode preserves the established cache.
@@ -443,7 +493,7 @@ async function translateInSentenceChunks(
     const translatedChunks: string[] = [];
     let invalidReason: string | undefined;
     for (const [chunkIndex, text] of chunks.entries()) {
-      const chunkId = `__b3rys_chunk_${paragraphIndex}_${chunkIndex}`;
+      const chunkId = `__web_translate_chunk_${paragraphIndex}_${chunkIndex}`;
       const result = await getEngine().translate(
         [{ id: chunkId, text }],
         mode,
@@ -487,7 +537,12 @@ async function translateInSentenceChunks(
 function isValidPageContext(
   context: TranslationContext | undefined,
 ): context is TranslationContext {
-  if (!context || context.version !== TRANSLATION_CONTEXT_VERSION || context.mode !== 'page') {
+  if (
+    !context ||
+    !isPublicModel(context.modelId) ||
+    context.version !== TRANSLATION_CONTEXT_VERSION ||
+    context.mode !== 'page'
+  ) {
     return false;
   }
   return (

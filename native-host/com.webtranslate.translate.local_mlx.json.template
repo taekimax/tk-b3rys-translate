@@ -1,6 +1,6 @@
 {
-  "name": "com.b3rys.translate.local_mlx",
-  "description": "b3rys translate local MLX host",
+  "name": "com.webtranslate.translate.local_mlx",
+  "description": "web-translate local MLX host",
   "path": "__HOST_PATH__",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://__EXTENSION_ID__/"]

@@ -1,224 +1,253 @@
-# b3rys translate
+# web-translate
 
-웹페이지 원문을 유지하면서 바로 아래에 번역을 표시하는 Chrome 확장 프로그램.
-YouTube 이중자막(원문 + 번역)도 지원합니다.
+웹페이지의 원문을 유지하면서 문단 아래에 번역을 표시하는 macOS용 Chrome 확장 프로그램입니다. YouTube 이중자막과 텍스트 선택 번역도 지원하며, 번역은 로컬 MLX 모델로 처리됩니다.
 
-> _A bilingual translation Chrome extension — keeps the original text and shows the translation right below it, paragraph by paragraph. Works on web pages and YouTube subtitles._
+`web-translate` is a macOS Chrome extension that keeps the original web-page text and inserts translations below it paragraph by paragraph. It also supports YouTube dual subtitles and selection translation, powered by local MLX models.
+
+This project is a derivative work based on [b3rys translate](https://github.com/b3rys/b3rys-translate). The upstream project is credited in [NOTICE](NOTICE), and its applicable license terms are preserved.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-vanilla-3178c6.svg)
 
-📋 [TODO](TODO.md) · 🤝 [기여 가이드](CONTRIBUTING.md)
+📋 [TODO](TODO.md) · [기여 가이드 / Contributing](CONTRIBUTING.md)
 
-### 웹페이지 번역
+## 기능 / Features
 
-원문 아래에 번역이 문단 단위로 삽입됩니다. (우하단 **둥둥이 버튼**으로 번역 시작 — 화살표 표시)
+### 한국어
 
-<img src="docs/web-translate.png" width="600">
+- 원문을 유지하는 문단 단위 번역: 병행 표시와 대치 표시를 전환할 수 있습니다.
+- 10개 타겟 언어, 소스 언어 자동 감지, 언어별 번역 캐시.
+- YouTube 원문 + 번역 이중자막, rolling 번역, 표시 모드 순환.
+- 텍스트 선택 번역: 단어는 예문과 발음 듣기, 문장은 번역과 복사를 제공합니다.
+- Hy-MT2 1.8B/7B Q4 및 약관 확인 후 다운로드하는 TranslateGemma 4B/12B Q4.
+- Hy-MT2 7B Q4를 기본 모델로 사용합니다.
+- API 키나 원격 LLM 서비스 없이 이 Mac에서만 추론합니다.
+- MutationObserver 기반 동적 페이지와 SPA 콘텐츠 처리, LRU 번역 캐시.
+- 팝업에서 한국어/English UI를 선택할 수 있으며 기본값은 한국어입니다.
 
-### 단어 선택 번역
+### English
 
-단어를 드래그하면 번역 + 예문이 팝업으로 표시됩니다.
+- Paragraph translation that preserves the source text, with parallel and replace modes.
+- Ten target languages, source-language detection, and per-language translation caches.
+- YouTube original + translated subtitles with rolling translation and display-mode cycling.
+- Selection translation: word definitions include examples and pronunciation; sentence results can be copied.
+- Hy-MT2 1.8B/7B Q4 and TranslateGemma 4B/12B Q4, downloaded after the applicable terms are reviewed.
+- Hy-MT2 7B Q4 is the default model.
+- Fully local inference on this Mac: no API key or remote LLM endpoint is required.
+- MutationObserver support for dynamic pages and SPAs, plus an LRU translation cache.
+- The popup UI can be switched between Korean and English; Korean is the default.
 
-<img src="docs/word-translate.png" width="400">
+Screenshots / 스크린샷:
 
-### YouTube 이중자막
+<img src="docs/web-translate.png" width="600" alt="Web-page translation / 웹페이지 번역" />
 
-원문 위에 번역이 함께 표시됩니다. (플레이어 하단 **A가 자막 버튼**으로 켜기 — 화살표 표시)
+<img src="docs/word-translate.png" width="400" alt="Selection translation / 선택 번역" />
 
-![YouTube 이중자막](docs/youtube-translate.jpeg)
+![YouTube dual subtitles / YouTube 이중자막](docs/youtube-translate.jpeg)
 
----
+## 설치 / Installation
 
-## 주요 기능
+### A. Claude Code skill / Claude Code 스킬
 
-- **문단 단위 이중 번역** — 원문을 유지하고 바로 아래에 번역 삽입 (병행/대치 모드 전환)
-- **10개 언어 지원** — 타겟 언어 선택, 소스 자동 감지, 언어별 캐시 분리
-- **YouTube 이중자막** — 원문 + 번역 오버레이, rolling 번역, 표시 모드 순환
-- **단어/문장 선택 번역** — 드래그 팝업, 단어 모드는 예문 2개 + 발음 듣기
-- **로컬 MLX 모델** — Gemma 4 E4B/12B, TranslateGemma 4B/12B, Hy-MT2 1.8B/7B Q4만 지원
-- **완전 로컬 추론** — API 키, 제공사 계정, 원격 LLM 엔드포인트 없음
-- **동적 콘텐츠 대응** — MutationObserver로 무한 스크롤·SPA 자동 번역
-- **LRU 캐시** — 번역 결과 캐싱 (TTL 7일, 최대 4,000개)
+Claude Code users can install the personal `/webtranslate` skill and receive guided instructions for loading the extension and configuring the native host:
 
----
-
-## 설치
-
-두 가지 방법이 있습니다. **Claude Code**를 쓴다면 방법 A가 가장 빠릅니다.
-
-### ⚡ 방법 A — Claude Code 스킬 (`/b3translate`)
-
-[Claude Code](https://claude.com/claude-code) 사용자는 대화만으로 **설치 → API 키 설정 → 사용법**까지 안내받을 수 있습니다. git 지식 없이 아래 중 하나로 스킬을 깔면 됩니다.
-
-**① 스킬 설치** (둘 중 택1)
-
-터미널 한 줄 (git 불필요):
+Claude Code 사용자는 개인 `/webtranslate` 스킬을 설치하면 확장 프로그램 로드와 native host 설정 안내를 받을 수 있습니다.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/b3rys/b3rys-translate/main/install-skill.sh | bash
+curl -fsSL https://raw.githubusercontent.com/taekimax/tk-b3rys-translate/main/install-skill.sh | bash
 ```
 
-또는 Claude Code 채팅에 붙여넣기:
+Then run:
 
-```
-github.com/b3rys/b3rys-translate 이 번역 확장 스킬 설치해줘
-```
-
-**② 실행**
-
-```
-/reload-skills      # 스킬 로드 (설치 직후 1회)
-/b3translate        # 실행 (또는 자연어 "번역 확장 설치해줘")
+```text
+/reload-skills
+/webtranslate
 ```
 
-`/b3translate`을 실행하면 스킬이 GitHub Release의 빌드된 zip을 받아 Chrome 로드 → 엔진·API 키 설정 → 첫 번역 시연까지 대화로 안내합니다. (Node.js 불필요)
+The skill source is [skills/webtranslate](skills/webtranslate/), and the installer is [install-skill.sh](install-skill.sh). This is optional; manual installation is described below.
 
-> 스킬은 `~/.claude/skills/b3translate/`에 설치되는 **개인 스킬**이라 명령이 `/b3translate`로 깔끔합니다. 스킬 소스: [skills/b3translate](skills/b3translate/) · 설치 스크립트: [install-skill.sh](install-skill.sh)
+스킬 소스는 [skills/webtranslate](skills/webtranslate/), 설치 스크립트는 [install-skill.sh](install-skill.sh)입니다. 스킬을 사용하지 않아도 아래 수동 설치가 가능합니다.
 
-### 🔧 방법 B — 직접 설치 (수동)
+### B. Manual installation / 수동 설치
 
-소스에서 빌드해 개발자 모드로 로드합니다. (Chrome 웹스토어 등록 준비 중)
-
-**1. 소스 받기**
+#### 1. Build / 빌드
 
 ```bash
-git clone https://github.com/b3rys/b3rys-translate.git
-cd b3rys-translate
-```
-
-**2. 빌드**
-
-```bash
+git clone https://github.com/taekimax/tk-b3rys-translate.git
+cd tk-b3rys-translate
 npm install
 npm run build
 ```
 
-`dist/chrome-mv3` 폴더에 확장 프로그램이 생성됩니다.
+The unpacked extension is written to `dist/chrome-mv3`.
 
-**3. Chrome에 확장 로드** (크롬 확장 설치가 처음이어도 OK)
+압축해제된 확장 프로그램은 `dist/chrome-mv3`에 생성됩니다.
 
-웹스토어 등록 전이라, 빌드된 폴더를 "압축해제된 확장"으로 직접 로드합니다.
+#### 2. Load in Chrome / Chrome에 로드
 
-1. **확장 관리 페이지 열기** — 크롬 **주소창**에 아래를 그대로 입력하고 Enter:
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the `dist/chrome-mv3` folder itself—the folder containing `manifest.json`.
+5. Pin **web-translate** from the puzzle-piece menu if desired.
 
-   ```
-   chrome://extensions
-   ```
+6. `chrome://extensions`를 엽니다.
+7. **개발자 모드**를 켭니다.
+8. **압축해제된 확장 프로그램을 로드합니다**를 클릭합니다.
+9. `manifest.json`이 들어 있는 `dist/chrome-mv3` 폴더 자체를 선택합니다.
+10. 필요하면 퍼즐 메뉴에서 **web-translate**를 툴바에 고정합니다.
 
-   (또는 우측 상단 ⋮ 메뉴 → **확장 프로그램** → **확장 프로그램 관리**)
+Keep the loaded folder in place. After rebuilding, click the extension’s reload button and refresh the target page.
 
-2. **개발자 모드 켜기** — 페이지 **우측 상단**의 `개발자 모드`(Developer mode) 토글을 **ON**. 켜면 위쪽에 버튼 몇 개가 새로 나타납니다.
+로드한 폴더를 옮기거나 삭제하지 마세요. 다시 빌드한 뒤에는 확장 프로그램 카드의 새로고침 버튼을 누르고 대상 페이지도 새로고침합니다.
 
-3. **`압축해제된 확장 프로그램을 로드합니다`**(Load unpacked) 버튼을 클릭.
+#### 3. Install the native host / native host 설치
 
-4. **폴더 선택** — 파일 선택창에서 방금 빌드한 **`dist/chrome-mv3`** 폴더를 고릅니다. (폴더 안으로 들어가지 말고 **폴더 자체를 선택**)
-   - 경로 예: `~/b3rys-translate/dist/chrome-mv3`
+The public build uses its own stable extension key and ID:
 
-5. 목록에 **"b3rys translate"** 카드가 뜨면 완료. (빨간 오류가 뜨면 폴더가 잘못된 것 — `manifest.json`이 들어있는 폴더를 골랐는지 확인.)
+공개 빌드는 upstream 확장 ID와 분리된 고정 공개 키와 ID를 사용합니다.
 
-6. **툴바에 고정**(편하게 쓰려면) — 주소창 오른쪽 **🧩 퍼즐 아이콘** 클릭 → "b3rys translate" 옆 **📌 핀** 클릭 → 아이콘이 툴바에 항상 보입니다.
+```text
+pocbdkddmkkipegbinejlhjopmgimbdl
+```
 
-> ⚠️ 로드한 `dist/chrome-mv3` 폴더를 **지우거나 옮기면 확장이 깨집니다** — 그대로 두세요. 코드 업데이트 후에는 `chrome://extensions`에서 이 확장의 **새로고침(↻)** 버튼을 누르면 반영됩니다.
-
-**4. 로컬 MLX 호스트 설치**
-
-이 저장소는 공개 키를 manifest에 고정해 확장 ID를 모든 컴퓨터에서 동일하게 유지합니다. 모델은 기본적으로 `~/Library/Application Support/b3rys-translate/models/`에 별도로 보관됩니다. 팝업의 **Check** 버튼은 선택한 모델의 실제 파일 상태를 확인하고, 없으면 명확한 설치 안내와 자동 다운로드 버튼을 표시합니다.
-
-현재 고정된 확장 ID: `pphoapgbladencjcfiplhhblhdhjahbi`
+Install and verify the host:
 
 ```bash
 cd native-host
-./install-host.sh <chrome-extension-id>
-./verify-host.sh <chrome-extension-id>
+./install-host.sh pocbdkddmkkipegbinejlhjopmgimbdl
+./verify-host.sh pocbdkddmkkipegbinejlhjopmgimbdl
 ```
 
-설치 스크립트가 필요한 Xcode/Metal/CMake 도구를 먼저 확인한 뒤 호스트와 MLX Metal 커널(`mlx.metallib`)을 빌드합니다. 완성된 호스트는 저장소 밖의 안정적인 경로에 복사하고 Chrome native-host manifest를 원자적으로 등록합니다. 처음 실행할 때 Xcode의 **Metal Toolchain** 컴포넌트와 CMake가 필요합니다. 실행 권한 문제가 있는 파일 시스템에서는 `zsh ./install-host.sh <chrome-extension-id>`로 실행할 수 있습니다.
+The installer builds the native host and MLX Metal kernel, registers the Chrome native-messaging manifest, and stores models outside the repository at:
 
-모델은 미리 여섯 개 모두 설치하지 않습니다. 팝업에서 아직 없는 모델을 선택하면 **not installed** 안내와 **Download model** 버튼이 표시됩니다. 버튼을 누르면 native host가 고정된 Hugging Face revision을 자동으로 다운로드합니다. Terminal이나 Hugging Face CLI는 필요하지 않으며, 팝업에는 다운로드 진행률이 표시됩니다. 실제 첫 번역 요청에서도 선택한 모델이 없으면 같은 자동 다운로드가 수행됩니다. 모델은 로컬에서만 사용되며, 번역 요청은 다운로드한 모델 파일 외부로 전송되지 않습니다.
+설치 스크립트는 native host와 MLX Metal kernel을 빌드하고 Chrome native-messaging manifest를 등록합니다. 모델은 저장소 밖의 다음 경로에 저장됩니다.
 
-manifest의 공개 키는 커밋해도 안전하지만, 선택적인 CRX 서명용 개인 키는 저장소에 넣지 않습니다. 개인 키는 각 개발 컴퓨터의 `~/.config/b3rys-translate/extension-key.pem`에 보관합니다.
+```text
+~/Library/Application Support/web-translate/models/
+```
 
-Chrome 툴바에서 확장 프로그램 아이콘을 열어 여섯 모델 중 하나를 고릅니다. API 키나 클라우드 설정은 없습니다.
+The extension ZIP does not contain model weights. Select a model in the popup; if it is missing, the popup asks for confirmation, and the download starts only after you click **Start download**. TranslateGemma downloads additionally require reviewing and accepting the Google Gemma Terms of Use and use restrictions.
 
----
+확장 프로그램 ZIP에는 모델 가중치가 들어 있지 않습니다. 팝업에서 모델을 선택하면 파일이 없을 때 다운로드 확인 안내가 표시되며, **다운로드 시작**을 눌러야 다운로드가 시작됩니다. TranslateGemma는 Google Gemma Terms of Use와 사용 제한을 확인하고 동의해야 다운로드할 수 있습니다.
 
-## 사용법
+#### Optional offline Hy-MT2 bundle / 선택적 Hy-MT2 오프라인 번들
 
-설치 방법과 무관하게 기능은 동일합니다.
+If a verified model is present in `.local-models`, create the separate model bundle with:
 
-### 웹페이지 번역
-
-- 페이지 우측 하단의 **플로팅 버튼** (A→가) 클릭 → 번역 시작
-- 번역 중 무한 스크롤·동적 로딩으로 새로 나타나는 콘텐츠도 이어서 번역됩니다
-- 버튼을 다시 클릭하면 번역 제거 (OFF)
-- 다른 페이지로 이동하면 번역은 꺼지므로, 새 페이지에서 버튼을 다시 눌러 시작합니다
-- **자동 번역**: 팝업에서 `Auto-translate`를 켜면 방문하는 모든 페이지가 자동으로 번역됩니다 (기본 OFF)
-
-### 선택 번역
-
-- 텍스트를 드래그하면 선택 영역 끝에 번역 트리거 버튼이 표시됩니다
-- **단어 선택**: 번역 + 예문 2개 + 발음 듣기가 컴팩트 팝업으로 표시
-- **문장 선택**: 번역이 팝업으로 표시 + 복사 버튼
-- 플로팅 버튼 OFF 시 선택 번역도 함께 비활성화
-
-### YouTube 자막 번역
-
-- YouTube 영상 플레이어 하단 컨트롤 바에 **A가** 번역 버튼이 추가됩니다
-- 클릭하면 자막을 가져와서 이중자막으로 표시 (표시 모드 순환: 원문+번역 → 원문 → 번역 → 끄기)
-- 다시 클릭하면 해제
-- 원문 자막이 타겟 언어와 같으면 번역 없이 원문만 표시합니다
-
-### 로컬 모델
-
-- 지원 모델은 Gemma 4 E4B/12B, TranslateGemma 4B/12B, Hy-MT2 1.8B/7B의 Q4 MLX 파일 여섯 개뿐입니다
-- 번역은 Chrome native messaging으로 macOS MLX 호스트에만 전달되며, 네트워크 LLM 요청·API 키·사용량/비용 계산은 없습니다
-
----
-
-## 개발
+검증된 모델 파일을 `.local-models`에 둔 뒤 별도 모델 번들을 만들 수 있습니다.
 
 ```bash
-npm run dev          # 개발 모드 (HMR, Chrome 자동 로드)
-npm run build        # 프로덕션 빌드
-npm run test         # 전체 테스트 실행
-npm run typecheck    # 타입 체크
-npm run lint         # ESLint 검사
-npm run format       # Prettier 포맷 적용
-npm run zip          # 배포용 zip 생성
+npm run package:hy-mt2-7b
 ```
 
-코드 수정 후 Chrome에서 확인하려면:
+This creates `dist/web-translate-<version>-hy-mt2-7b-q4.tar.zst`. Install it with:
 
-1. `npm run build` 실행
-2. `chrome://extensions`에서 확장 프로그램 리로드 (↻)
-3. 대상 페이지 새로고침
+이 명령은 `dist/web-translate-<version>-hy-mt2-7b-q4.tar.zst`를 생성합니다. 다음처럼 설치합니다.
 
-### 기술 스택
+```bash
+./install-host.sh pocbdkddmkkipegbinejlhjopmgimbdl \
+  ../dist/web-translate-0.6.0-hy-mt2-7b-q4.tar.zst
+```
 
-- **Framework**: [WXT](https://wxt.dev/) (Web Extension Framework) + Manifest V3
-- **Language**: TypeScript (vanilla, no framework)
-- **Test**: Vitest + happy-dom
+The approximately 3.95 GiB model bundle is distributed separately from the small Chrome extension ZIP.
 
-### 기술 문서
+약 3.95 GiB의 모델 번들은 작은 Chrome 확장 프로그램 ZIP과 별도로 배포합니다.
 
-코드 수정 전에 해당 영역의 문서를 먼저 읽으면 전체 구조를 빠르게 파악할 수 있습니다.
+### C. Standalone private macOS preview / 독립 실행형 macOS private preview
 
-| 문서                                 | 내용                                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------------------- |
-| [docs/pipeline.md](docs/pipeline.md) | 번역 파이프라인 (텍스트 감지 3단계, 필터 체인, 주입 4경로, 사이트 룰, 배치 처리)   |
-| [docs/ui-guide.md](docs/ui-guide.md) | UI 동작 가이드 (FAB 상태, 모드 전환, 주입 경로별 before/after, YouTube 오버레이)   |
-| [docs/safety.md](docs/safety.md)     | 안전 장치 & 상태 머신 (circuit breaker, rate limiter, 경쟁 조건 보호, Observer 룰) |
-| [TODO.md](TODO.md)                   | 작업 트래커                                                                        |
+For a recipient who should not install developer tools, build the full offline Apple Silicon disk image:
 
-## 기여
+개발 도구를 설치하지 않는 사용자를 위해 Apple Silicon용 전체 오프라인 디스크 이미지를 만들 수 있습니다.
 
-버그 리포트, 기능 제안, PR 모두 환영합니다. [기여 가이드](CONTRIBUTING.md)를 참고해 주세요.
+```bash
+npm run package:standalone:macos
+```
 
-## 라이선스
+This creates `dist/web-translate-<version>-macos-arm64.dmg`. It contains the expanded Chrome extension, a prebuilt native MLX host, `mlx.metallib`, the pinned Hy-MT2 7B model, checksums, licenses, and a bilingual `START-HERE.html` guide. Recipients do not need Xcode, Swift, CMake, Homebrew, Node, Python, `zstd`, or a network connection.
 
-[Apache License 2.0](LICENSE) © 2026 b3rys
+이 명령은 `dist/web-translate-<version>-macos-arm64.dmg`를 만듭니다. 확장 프로그램, prebuilt native MLX host, `mlx.metallib`, 고정된 Hy-MT2 7B 모델, 체크섬, 라이선스와 한영 설치 안내를 포함합니다. 사용자는 Xcode, Swift, CMake, Homebrew, Node, Python, `zstd` 또는 네트워크를 설치할 필요가 없습니다.
 
-재배포하거나 2차 저작물을 만들 때는 [NOTICE](NOTICE)와 [LICENSE](LICENSE)를 함께 포함하고,
-원저작자(**b3rys** / 이 저장소)를 표기해 주세요. (Apache License §4)
+This is currently an unsigned private preview. After mounting the DMG, users run `Install.command`, then manually open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `~/Library/Application Support/web-translate/extension`. The extension ID must be `pocbdkddmkkipegbinejlhjopmgimbdl`. If macOS blocks an unsigned file, use only the file-specific approval in **System Settings → Privacy & Security**; never disable Gatekeeper globally. A signed/notarized installer is a later release step.
+
+현재는 서명되지 않은 private preview입니다. DMG를 마운트한 뒤 `Install.command`를 실행하고, Chrome에서 `chrome://extensions`를 열어 개발자 모드를 켠 다음 **압축해제된 확장 프로그램을 로드합니다**를 선택하고 `~/Library/Application Support/web-translate/extension`을 지정합니다. 확장 프로그램 ID는 `pocbdkddmkkipegbinejlhjopmgimbdl`이어야 합니다. macOS가 서명되지 않은 파일을 차단하면 **시스템 설정 → 개인정보 보호 및 보안**에서 해당 파일만 허용하고, Gatekeeper 전체 해제는 하지 마세요. 서명 및 notarization은 이후 릴리스 단계입니다.
+
+The package is for Apple Silicon Macs running macOS 14 or newer. See [docs/standalone-distribution.md](docs/standalone-distribution.md) for the maintainer workflow and [standalone/UNINSTALL.md](standalone/UNINSTALL.md) for removal guidance.
+
+이 패키지는 macOS 14 이상 Apple Silicon Mac용입니다. 제작자 절차는 [docs/standalone-distribution.md](docs/standalone-distribution.md), 제거 방법은 [standalone/UNINSTALL.md](standalone/UNINSTALL.md)를 참고하세요.
+
+## 사용법 / Usage
+
+### Web pages / 웹페이지
+
+- Click the black-and-white floating button near the lower-right edge of the page.
+- Click it again to remove translations.
+- Turn on **Auto / 자동** in the popup to translate new pages automatically; it is off by default.
+
+- 페이지 우하단의 흑백 플로팅 버튼을 클릭해 번역을 시작합니다.
+- 다시 클릭하면 번역을 제거합니다.
+- 팝업에서 **Auto / 자동**을 켜면 새 페이지도 자동 번역합니다. 기본값은 꺼짐입니다.
+
+### Selection translation / 선택 번역
+
+Select text on a page and click the translation trigger. Single-word selections show examples and pronunciation; longer selections show a translation popup and copy button.
+
+페이지에서 텍스트를 선택한 뒤 번역 트리거를 클릭합니다. 단어 선택은 예문과 발음 듣기를, 문장 선택은 번역 팝업과 복사 버튼을 제공합니다.
+
+### YouTube subtitles / YouTube 자막
+
+Click the **A가** button in the YouTube player controls. The button cycles through original + translation, original only, translation only, and off. If the source subtitles already match the target language, only the original subtitles are shown.
+
+YouTube 플레이어 컨트롤의 **A가** 버튼을 클릭합니다. 원문+번역, 원문만, 번역만, 끄기 순서로 표시 모드를 전환합니다. 원문 자막이 타겟 언어와 같으면 원문만 표시합니다.
+
+### Models / 모델
+
+Supported models are Hy-MT2 1.8B/7B Q4 and TranslateGemma 4B/12B Q4. The older Gemma 4 models are not supported. Model revisions, sources, and license notes are recorded in [docs/model-licenses.md](docs/model-licenses.md).
+
+지원 모델은 Hy-MT2 1.8B/7B Q4와 TranslateGemma 4B/12B Q4입니다. 이전 Gemma 4 모델은 지원하지 않습니다. 모델 revision, 출처, 라이선스 정보는 [docs/model-licenses.md](docs/model-licenses.md)에 기록되어 있습니다.
+
+## 개발 / Development
+
+```bash
+npm run dev          # development build / 개발 모드
+npm run build        # production build / 프로덕션 빌드
+npm run test         # test suite / 전체 테스트
+npm run typecheck    # TypeScript checks / 타입 체크
+npm run lint         # ESLint
+npm run format       # Prettier
+npm run zip          # release ZIP / 배포 ZIP
+```
+
+After changing code, run `npm run build`, reload the extension in `chrome://extensions`, and refresh the target page.
+
+코드를 수정한 뒤 `npm run build`를 실행하고 `chrome://extensions`에서 확장 프로그램을 새로고침한 다음 대상 페이지를 새로고침합니다.
+
+### 기술 스택 / Stack
+
+- [WXT](https://wxt.dev/) + Manifest V3
+- TypeScript, vanilla DOM APIs
+- Vitest + happy-dom
+- macOS native messaging + MLX
+
+Architecture and safety notes are in [docs/pipeline.md](docs/pipeline.md), [docs/ui-guide.md](docs/ui-guide.md), and [docs/safety.md](docs/safety.md).
+
+## 기여 / Contributing
+
+Bug reports, feature proposals, documentation fixes, and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+버그 리포트, 기능 제안, 문서 수정, PR을 환영합니다. 먼저 [CONTRIBUTING.md](CONTRIBUTING.md)를 읽어 주세요.
+
+## 라이선스, 출처, 배포 / License, attribution, and distribution
+
+The application source is distributed under the [Apache License 2.0](LICENSE). The project includes the required [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) files. Redistribution should preserve those files, credit the original **b3rys translate** project, and identify modifications made in this project.
+
+앱 소스는 [Apache License 2.0](LICENSE)으로 배포합니다. 필요한 [NOTICE](NOTICE)와 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 함께 제공합니다. 재배포 시 해당 문서를 유지하고 원 프로젝트인 **b3rys translate**를 표시하며 이 프로젝트의 변경 사항도 밝혀야 합니다.
+
+TranslateGemma model weights and derivatives are subject to the Google Gemma Terms of Use and use restrictions in addition to the application license. Model-specific information is maintained in [docs/model-licenses.md](docs/model-licenses.md). Model weights are kept out of the Chrome extension ZIP and are downloaded or distributed as a separate bundle.
+
+TranslateGemma 모델 가중치와 파생물에는 앱 라이선스와 별도로 Google Gemma Terms of Use 및 사용 제한이 적용됩니다. 모델별 정보는 [docs/model-licenses.md](docs/model-licenses.md)에 관리합니다. 모델 가중치는 Chrome 확장 프로그램 ZIP에 넣지 않고 별도 다운로드 또는 번들로 배포합니다.
+
+This documentation describes source distribution and Chrome Developer Mode installation. A general consumer macOS release requires a separate Chrome Web Store and native-messaging release review.
+
+이 문서는 소스 배포와 Chrome 개발자 모드 설치를 설명합니다. 일반 사용자 대상 macOS 배포에는 Chrome Web Store와 native-messaging에 대한 별도 릴리스 검토가 필요합니다.

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>web-translate private preview</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font:
+          16px/1.55 -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      body {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 36px 24px 56px;
+      }
+      code {
+        padding: 0.12em 0.35em;
+        border-radius: 4px;
+        background: color-mix(in srgb, currentColor 12%, transparent);
+      }
+      .warning {
+        padding: 14px 16px;
+        border: 1px solid #c98a00;
+        border-radius: 8px;
+      }
+      li {
+        margin: 0.65em 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>web-translate private preview</h1>
+    <p>
+      Offline Korean/English web translation for Apple Silicon Macs using the bundled Hy-MT2 7B
+      model.
+    </p>
+    <p class="warning">
+      <strong>Unsigned preview:</strong> this package is not Developer ID signed or notarized yet.
+      Do not disable Gatekeeper globally. If macOS blocks a file, use the file-specific approval in
+      <strong>System Settings → Privacy &amp; Security</strong>, and stop if that approval path is
+      not available.
+    </p>
+
+    <h2>Install / 설치</h2>
+    <ol>
+      <li>
+        Open <code>Install.command</code> from this mounted disk image. It installs the prebuilt
+        native host, MLX Metal library, bundled Hy-MT2 7B model, notices, and the unpacked extension
+        into your user Library. No administrator password, Xcode, Swift, CMake, Homebrew, Node,
+        Python, or network connection is required.
+      </li>
+      <li>
+        Open <code>chrome://extensions</code> in Google Chrome and enable
+        <strong>Developer mode</strong>.
+      </li>
+      <li>
+        Choose <strong>Load unpacked</strong>, press <code>Cmd-Shift-G</code>, and select
+        <code>~/Library/Application Support/web-translate/extension</code>.
+      </li>
+      <li>Confirm the extension ID is <code>pocbdkddmkkipegbinejlhjopmgimbdl</code>.</li>
+      <li>
+        Open the web-translate popup. Hy-MT2 7B should say <strong>Ready</strong>. Reload the
+        extension and refresh the page if Chrome asks.
+      </li>
+      <li>Run one translation while offline to confirm the local model is working.</li>
+    </ol>
+
+    <h2>설치 안내</h2>
+    <ol>
+      <li>
+        마운트된 디스크 이미지에서 <code>Install.command</code>를 실행합니다. prebuilt native host,
+        MLX Metal library, Hy-MT2 7B 모델, 고지 문서와 확장 프로그램을 사용자 Library에 설치합니다.
+        관리자 암호, Xcode, Swift, CMake, Homebrew, Node, Python 또는 네트워크가 필요하지 않습니다.
+      </li>
+      <li>
+        Chrome에서 <code>chrome://extensions</code>를 열고 <strong>개발자 모드</strong>를 켭니다.
+      </li>
+      <li>
+        <strong>압축해제된 확장 프로그램을 로드합니다</strong>를 선택하고 <code>Cmd-Shift-G</code>를
+        눌러 <code>~/Library/Application Support/web-translate/extension</code>을 선택합니다.
+      </li>
+      <li>확장 프로그램 ID가 <code>pocbdkddmkkipegbinejlhjopmgimbdl</code>인지 확인합니다.</li>
+      <li>
+        web-translate 팝업을 열어 Hy-MT2 7B가 <strong>준비됨</strong>인지 확인합니다. Chrome이
+        요청하면 확장 프로그램을 새로고침하고 페이지도 새로고침합니다.
+      </li>
+      <li>오프라인 상태에서 한 번 번역해 로컬 모델이 작동하는지 확인합니다.</li>
+    </ol>
+
+    <h2>Limitations / 제한</h2>
+    <ul>
+      <li>Private preview: Apple Silicon and macOS 14 or newer only.</li>
+      <li>Chrome Developer mode and manual Load unpacked are required for this private build.</li>
+      <li>The extension requests access to page content in order to translate it locally.</li>
+      <li>
+        TranslateGemma models remain optional downloads and require their applicable terms review.
+      </li>
+      <li>For removal and recovery, read <code>UNINSTALL.md</code>.</li>
+    </ul>
+  </body>
+</html>

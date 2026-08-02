@@ -26,6 +26,14 @@ native-host/.build
 
 # Packaged extension
 *.zip
+*.tar.zst
+
+# Generated compliance files copied into WXT's public directory before builds
+public/LICENSE
+public/NOTICE
+public/THIRD_PARTY_NOTICES.md
+public/PRIVACY.md
+public/MODEL_LICENSES.md
 
 # OS / editor cruft
 .DS_Store

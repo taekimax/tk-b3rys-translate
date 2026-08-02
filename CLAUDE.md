@@ -1,4 +1,4 @@
-# b3rys translate - Chrome Extension
+# web-translate - Chrome Extension
 
 ## Project Overview
 
@@ -8,14 +8,14 @@
 
 ## ⚠️ 코드 수정 전 필수 (MANDATORY)
 
-**코드를 수정하기 전에 반드시 해당 스킬을 먼저 읽을 것. 읽지 않고 수정하면 무한 루프, 경쟁 조건, API 비용 폭주 등 치명적 버그가 재발한다.**
+**코드를 수정하기 전에 반드시 해당 스킬을 먼저 읽을 것. 읽지 않고 수정하면 무한 루프, 경쟁 조건, native 요청·메모리 폭주 등 치명적 버그가 재발한다.**
 
-| 수정 대상                                           | 필수 스킬                 | 핵심 위험                                    |
-| --------------------------------------------------- | ------------------------- | -------------------------------------------- |
-| `content.ts`, `observer.ts`, `background.ts`        | `/safety-rules`           | Observer 무한 루프, 경쟁 조건, API 비용 폭주 |
-| `text-detector.ts`, `translator.ts`, `constants.ts` | `/page-translate-rules`   | 감지 중복, 주입 경로 오류                    |
-| `selection-popup.ts`, `llm-helpers.ts`              | `/selection-popup-rules`  | 팝업 UI 깨짐                                 |
-| `youtube/` 디렉토리                                 | `/youtube-subtitle-rules` | 자막 파이프라인 오류                         |
+| 수정 대상                                           | 필수 스킬                 | 핵심 위험                                       |
+| --------------------------------------------------- | ------------------------- | ----------------------------------------------- |
+| `content.ts`, `observer.ts`, `background.ts`        | `/safety-rules`           | Observer 무한 루프, 경쟁 조건, native 요청 폭주 |
+| `text-detector.ts`, `translator.ts`, `constants.ts` | `/page-translate-rules`   | 감지 중복, 주입 경로 오류                       |
+| `selection-popup.ts`, `llm-helpers.ts`              | `/selection-popup-rules`  | 팝업 UI 깨짐                                    |
+| `youtube/` 디렉토리                                 | `/youtube-subtitle-rules` | 자막 파이프라인 오류                            |
 
 ### 절대 위반 금지 (이것만은 꼭 기억할 것)
 
@@ -27,7 +27,7 @@
 
 - **Framework**: WXT (Web Extension Framework) + Manifest V3
 - **Language**: TypeScript (vanilla, no React/Vue)
-- **Translation runtime**: local MLX native host only (six fixed Q4 models; no cloud API)
+- **Translation runtime**: local MLX native host only (Hy-MT2 Q4 and terms-gated TranslateGemma Q4; Gemma 4 is not supported)
 - **Build**: WXT (Vite 기반)
 - **Test**: Vitest + happy-dom
 
@@ -110,7 +110,7 @@ native-host/                 # Swift MLX Chrome native host + installer template
 
 ## Mac Studio Chrome 실환경 검증
 
-- b3rys-translate의 실제 브라우저 검증에는 **Mac Studio Chrome의 일반 탭을 사용해도 된다**. 테스트용 탭을 새로 열거나 기존 b3rys-translate 관련 탭을 사용할 수 있다.
+- web-translate의 실제 브라우저 검증에는 **Mac Studio Chrome의 일반 탭을 사용해도 된다**. 테스트용 탭을 새로 열거나 기존 web-translate 관련 탭을 사용할 수 있다.
 - 자동 테스트는 실제 Chrome 검증을 대체하지 않으며, 실제 Chrome 검증도 전체 test·lint·typecheck·build를 대체하지 않는다.
 - 개인 페이지나 unrelated 탭은 불필요하게 조작하지 않고, API 키·계정 정보 등 자격 증명 값은 읽거나 기록하지 않는다.
 - **YouTube 테스트를 수행했다면 종료 전에 반드시 영상을 일시정지하고, 실제 재생이 멈췄는지 다시 확인한다.** 단순히 테스트 탭을 떠나거나 음소거하는 것으로 대신하지 않는다.
@@ -129,9 +129,9 @@ native-host/                 # Swift MLX Chrome native host + installer template
 ## Key Decisions
 
 - 번역 방향: EN → KO 고정
-- API 키와 설정: `chrome.storage.local`에 저장 (사용자가 popup에서 입력, 기기 간 동기화 안 함)
+- API 키 없음. 선택 모델·버튼 설정·캐시는 `chrome.storage.local`에 저장 (기기 간 동기화 안 함)
 - Floating button: Shadow DOM으로 CSS 격리
-- 번역 단위: 문단(paragraph) 단위, viewport-first 병렬 배치
+- 번역 단위: 문단(paragraph) 단위, native request 직렬화
 - 번역문 스타일: 원문 아래에 원문과 동일한 색상으로 표시
 
 ## Future Plans

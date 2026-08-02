@@ -14,12 +14,12 @@ afterEach(() => {
 });
 
 describe('observeDynamicContent', () => {
-  it('ignores elements with data-b3rys-* attributes', async () => {
+  it('ignores elements with data-web-translate-* attributes', async () => {
     const callback = vi.fn();
     const unsubscribe = observeDynamicContent(callback);
 
     const el = document.createElement('span');
-    el.setAttribute('data-b3rys-translated', 'true');
+    el.setAttribute('data-web-translate-translated', 'true');
     document.body.appendChild(el);
 
     await vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY + 50);
@@ -28,12 +28,12 @@ describe('observeDynamicContent', () => {
     unsubscribe();
   });
 
-  it('ignores elements with b3rys-* class', async () => {
+  it('ignores elements with web-translate-* class', async () => {
     const callback = vi.fn();
     const unsubscribe = observeDynamicContent(callback);
 
     const el = document.createElement('span');
-    el.className = 'b3rys-translation';
+    el.className = 'web-translate-translation';
     document.body.appendChild(el);
 
     await vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY + 50);
@@ -100,13 +100,13 @@ describe('observeDynamicContent', () => {
     unsubscribe();
   });
 
-  it('calls callback when mixed b3rys + normal elements are added', async () => {
+  it('calls callback when mixed web-translate + normal elements are added', async () => {
     const callback = vi.fn();
     const unsubscribe = observeDynamicContent(callback);
 
-    const b3rys = document.createElement('span');
-    b3rys.setAttribute('data-b3rys-translated', 'true');
-    document.body.appendChild(b3rys);
+    const webTranslate = document.createElement('span');
+    webTranslate.setAttribute('data-web-translate-translated', 'true');
+    document.body.appendChild(webTranslate);
 
     const normal = document.createElement('p');
     normal.textContent = 'Normal content';
@@ -166,7 +166,7 @@ describe('observeDynamicContent', () => {
   it("reports 'replaced' when a detected block (BLOCK_ID) is removed", async () => {
     const container = document.createElement('div');
     const detected = document.createElement('p');
-    detected.setAttribute('data-b3rys-id', 'b3rys-1');
+    detected.setAttribute('data-web-translate-id', 'web-translate-1');
     container.appendChild(detected);
     document.body.appendChild(container);
 
@@ -184,7 +184,7 @@ describe('observeDynamicContent', () => {
 
   it("'replaced' outranks 'added' within one debounce window", async () => {
     const detected = document.createElement('p');
-    detected.setAttribute('data-b3rys-id', 'b3rys-2');
+    detected.setAttribute('data-web-translate-id', 'web-translate-2');
     document.body.appendChild(detected);
 
     const callback = vi.fn();

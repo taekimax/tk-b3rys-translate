@@ -44,7 +44,7 @@
 
 **맥락**: Gmail 등 forceReplace 사이트에서 원문을 번역문으로 물리적으로 교체하면, 모드 전환(parallel ↔ replace) 시 원문 복원 불가.
 
-**결정**: `markOriginalContent()` + CSS `body.b3rys-replace-mode` 토글만 사용. 물리적 DOM 교체 금지.
+**결정**: `markOriginalContent()` + CSS `body.web-translate-replace-mode` 토글만 사용. 물리적 DOM 교체 금지.
 
 **이유**:
 
@@ -66,24 +66,24 @@
 
 - 호스트 페이지 CSS와 완전 격리
 - `closed` 모드로 외부 JS 접근 차단
-- Observer의 `isB3rysElement()` 필터로 자체 DOM 변경 감지 방지
+- Observer의 `isWebTranslateElement()` 필터로 자체 DOM 변경 감지 방지
 
 ---
 
-## AD-005: 2중 API 비용 보호
+## AD-005: 2중 native 요청 보호
 
 **날짜**: 2026-02
 **상태**: 확정
 
-**맥락**: Observer 무한 루프나 코드 버그로 API 호출 폭주 가능.
+**맥락**: Observer 무한 루프나 코드 버그로 native 모델 요청이 폭주할 수 있음.
 
-**결정**: Content(circuit breaker: 15회/분 시작 제한) + Background(rate limiter: 50회/분 API 콜 제한) 2중 방어.
+**결정**: Content circuit breaker(생산적인 번역 시작 제한) + Background serial priority queue(동시 native 요청 금지)로 2중 방어.
 
 **이유**:
 
 - Content 레벨: 번역 시작 자체를 제한 (근본 차단)
-- Background 레벨: Content 버그와 무관하게 API 호출 상한 보장
-- 캐시 hit는 rate limiter에서 제외 (비용 무관)
+- Background 레벨: Content 버그와 무관하게 native 모델을 한 번에 하나만 사용
+- 캐시 hit는 native 모델을 호출하지 않음
 
 ---
 

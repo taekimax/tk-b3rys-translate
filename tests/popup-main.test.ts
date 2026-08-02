@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { setupChromeMock } from './helpers/chrome-mock';
 import { SELECTED_MODEL_KEY } from '@/utils/models';
+import { UI_LANGUAGE_STORAGE_KEY } from '@/utils/constants';
 
 const popupHtml = readFileSync(resolve(__dirname, '../entrypoints/popup/index.html'), 'utf-8')
   .replace(/<link[\s\S]*?>/g, '')
@@ -22,23 +23,67 @@ describe('popup local model wiring', () => {
     document.dispatchEvent(new Event('DOMContentLoaded'));
     const select = document.getElementById('model-select') as HTMLSelectElement;
     await vi.waitFor(() => {
-      expect(select.options).toHaveLength(6);
+      expect(select.options).toHaveLength(4);
       expect(select.value).toBe('hy-mt2-7b-q4');
     });
-    select.value = 'gemma4-e4b-q4';
+    select.value = 'hy-mt2-1.8b-q4';
     select.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(mock.local._data.get(SELECTED_MODEL_KEY)).toBe('gemma4-e4b-q4'));
+    await vi.waitFor(() => expect(mock.local._data.get(SELECTED_MODEL_KEY)).toBe('hy-mt2-1.8b-q4'));
+  });
+
+  it('renders the popup in English when selected', async () => {
+    const mock = setupChromeMock({
+      localStorage: {
+        [UI_LANGUAGE_STORAGE_KEY]: 'en',
+        selectedModel: 'hy-mt2-7b-q4',
+      },
+    });
+    mock.sendMessage.mockResolvedValue({
+      success: true,
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
+      models: [
+        {
+          id: 'hy-mt2-7b-q4',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-7b-q4',
+          ready: true,
+          missingFiles: [],
+        },
+      ],
+    });
+    await import('@/entrypoints/popup/main');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      expect(document.documentElement.lang).toBe('en');
+      expect(document.querySelector('[data-i18n="localModel"]')?.textContent).toBe('Local model');
+      expect(document.getElementById('check-models')?.textContent).toBe('Check status');
+      expect(document.getElementById('local-host-status')?.textContent).toContain(
+        'Ready · Hy-MT2 7B (Q4)',
+      );
+    });
+  });
+
+  it('shows standalone installation guidance when the native host is unavailable', async () => {
+    const mock = setupChromeMock({ localStorage: { selectedModel: 'hy-mt2-7b-q4' } });
+    mock.sendMessage.mockRejectedValue(new Error('Native host unavailable'));
+    await import('@/entrypoints/popup/main');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vi.waitFor(() => {
+      const guide = document.getElementById('standalone-install-help') as HTMLDivElement;
+      expect(guide.hidden).toBe(false);
+      expect(guide.textContent).toContain('DMG');
+      expect(guide.textContent).toContain('chrome://extensions');
+    });
   });
 
   it('explicitly notices a missing selected model and offers automatic download', async () => {
     const mock = setupChromeMock({ localStorage: { selectedModel: 'hy-mt2-1.8b-q4' } });
     mock.sendMessage.mockResolvedValue({
       success: true,
-      modelRoot: '/Users/test/Library/Application Support/b3rys-translate/models',
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
       models: [
         {
           id: 'hy-mt2-1.8b-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
           ready: false,
           missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
         },
@@ -62,11 +107,11 @@ describe('popup local model wiring', () => {
   it('starts a native automatic download only after the user clicks Download model', async () => {
     const status = {
       success: true,
-      modelRoot: '/Users/test/Library/Application Support/b3rys-translate/models',
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
       models: [
         {
           id: 'hy-mt2-1.8b-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
           ready: false,
           missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
         },
@@ -87,20 +132,20 @@ describe('popup local model wiring', () => {
     });
   });
 
-  it('lets the user queue another missing model while a download is pending', async () => {
+  it('asks before downloading another missing model while a download is pending', async () => {
     const status = {
       success: true,
-      modelRoot: '/Users/test/Library/Application Support/b3rys-translate/models',
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
       models: [
         {
           id: 'hy-mt2-1.8b-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
           ready: false,
           missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
         },
         {
-          id: 'gemma4-e4b-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/gemma4-e4b-q4/475b9088d29754a3379866cf5aeb6b41acd313c2',
+          id: 'hy-mt2-7b-q4',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-7b-q4/9b7204bdb161490a8ce49ce607c1310cc3fd03ad',
           ready: false,
           missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
         },
@@ -127,21 +172,69 @@ describe('popup local model wiring', () => {
       }),
     );
     expect(select.disabled).toBe(false);
-    select.value = 'gemma4-e4b-q4';
+    select.value = 'hy-mt2-7b-q4';
     select.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(select.value).toBe('gemma4-e4b-q4'));
-    expect(document.getElementById('model-install-title')?.textContent).toContain(
-      'Gemma 4 E4B (Q4) 모델을 다운로드할까요?',
-    );
-    button.click();
-    expect(mock.sendMessage).toHaveBeenCalledWith({
+    await vi.waitFor(() => expect(select.value).toBe('hy-mt2-7b-q4'));
+    expect(mock.sendMessage).not.toHaveBeenCalledWith({
       type: 'DOWNLOAD_MODEL',
-      modelId: 'gemma4-e4b-q4',
+      modelId: 'hy-mt2-7b-q4',
     });
+    expect(button.disabled).toBe(false);
+    button.click();
+    await vi.waitFor(() =>
+      expect(mock.sendMessage).toHaveBeenCalledWith({
+        type: 'DOWNLOAD_MODEL',
+        modelId: 'hy-mt2-7b-q4',
+      }),
+    );
     expect(mock.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'TRANSLATE_BATCH' }),
     );
     finishDownload(status);
+  });
+
+  it('requires TranslateGemma terms before automatically downloading a selected model', async () => {
+    const status = {
+      success: true,
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
+      models: [
+        {
+          id: 'translategemma-4b-it-q4',
+          path: '/Users/test/Library/Application Support/web-translate/models/translategemma-4b-it-q4/5788ec08c047f3f2e17808101b8d9566ac930d58',
+          ready: false,
+          missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
+        },
+      ],
+    };
+    const mock = setupChromeMock({ localStorage: { selectedModel: 'hy-mt2-1.8b-q4' } });
+    mock.sendMessage.mockResolvedValue(status);
+    await import('@/entrypoints/popup/main');
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    const select = document.getElementById('model-select') as HTMLSelectElement;
+    await vi.waitFor(() => expect(select.options).toHaveLength(4));
+
+    select.value = 'translategemma-4b-it-q4';
+    select.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => {
+      expect((document.getElementById('model-terms-guide') as HTMLDivElement).hidden).toBe(false);
+      expect(mock.sendMessage).not.toHaveBeenCalledWith({
+        type: 'DOWNLOAD_MODEL',
+        modelId: 'translategemma-4b-it-q4',
+      });
+    });
+
+    const checkbox = document.getElementById('accept-model-terms') as HTMLInputElement;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    const accept = document.getElementById('accept-model-terms-download') as HTMLButtonElement;
+    expect(accept.disabled).toBe(false);
+    accept.click();
+    await vi.waitFor(() =>
+      expect(mock.sendMessage).toHaveBeenCalledWith({
+        type: 'DOWNLOAD_MODEL',
+        modelId: 'translategemma-4b-it-q4',
+      }),
+    );
   });
 
   it('shows active lazy-download progress for the selected model', async () => {
@@ -165,11 +258,11 @@ describe('popup local model wiring', () => {
     });
     mock.sendMessage.mockResolvedValue({
       success: true,
-      modelRoot: '/Users/test/Library/Application Support/b3rys-translate/models',
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
       models: [
         {
           id: 'hy-mt2-1.8b-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912',
           ready: false,
           missingFiles: ['config.json', 'tokenizer.json', 'model.safetensors'],
         },
@@ -229,10 +322,10 @@ describe('popup local model wiring', () => {
   it('does not render a stale legacy download marker for a ready model', async () => {
     const mock = setupChromeMock({
       localStorage: {
-        selectedModel: 'translategemma-4b-it-q4',
+        selectedModel: 'hy-mt2-7b-q4',
         localModelDownloadState: {
           requestId: 'legacy-download',
-          modelId: 'translategemma-4b-it-q4',
+          modelId: 'hy-mt2-7b-q4',
           fraction: 0,
           updatedAt: Date.now(),
         },
@@ -240,11 +333,11 @@ describe('popup local model wiring', () => {
     });
     mock.sendMessage.mockResolvedValue({
       success: true,
-      modelRoot: '/Users/test/Library/Application Support/b3rys-translate/models',
+      modelRoot: '/Users/test/Library/Application Support/web-translate/models',
       models: [
         {
-          id: 'translategemma-4b-it-q4',
-          path: '/Users/test/Library/Application Support/b3rys-translate/models/translategemma-4b-it-q4/5788ec08c047f3f2e17808101b8d9566ac930d58',
+          id: 'hy-mt2-7b-q4',
+          path: '/Users/test/Library/Application Support/web-translate/models/hy-mt2-7b-q4/9b7204bdb161490a8ce49ce607c1310cc3fd03ad',
           ready: true,
           missingFiles: [],
         },
@@ -254,7 +347,7 @@ describe('popup local model wiring', () => {
     document.dispatchEvent(new Event('DOMContentLoaded'));
     await vi.waitFor(() => {
       expect(document.getElementById('local-host-status')?.textContent).toContain(
-        '준비됨 · TranslateGemma 4B (Q4)',
+        '준비됨 · Hy-MT2 7B (Q4)',
       );
       expect((document.getElementById('model-install-guide') as HTMLDivElement).hidden).toBe(true);
       expect((document.getElementById('model-download-progress') as HTMLDivElement).hidden).toBe(

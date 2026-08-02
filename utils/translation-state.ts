@@ -144,7 +144,7 @@ export class TranslationStateMachine {
     // so no-op passes on a busy page (Gmail churn) never trip it.
     const now = Date.now();
     if (checkCircuitBreaker(this.recentStarts, now, CIRCUIT_MAX, CIRCUIT_WINDOW).tripped) {
-      console.error('[b3rys] Circuit breaker tripped — switching to manual-only mode');
+      console.error('[web-translate] Circuit breaker tripped — switching to manual-only mode');
       this.setState('error');
       await this.deps.persistEnabled(false);
       return;

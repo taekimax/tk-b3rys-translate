@@ -21,8 +21,20 @@ import { getVideoId } from '@/utils/youtube-helpers';
 import { mergeCues, mergeCuesTwoLine, postProcessCues } from './cue-merger';
 import './subtitle-styles.css';
 import { isContextInvalidated, markContextInvalidated } from '../context-invalidated';
-import { LANG_STORAGE_KEY, DEFAULT_TARGET_LANG, LANGUAGES } from '@/utils/constants';
+import {
+  LANG_STORAGE_KEY,
+  DEFAULT_TARGET_LANG,
+  LANGUAGES,
+  UI_LANGUAGE_STORAGE_KEY,
+} from '@/utils/constants';
 import type { LanguageCode } from '@/utils/constants';
+import type { UiLanguage } from '@/utils/constants';
+import {
+  getActiveUiLanguage,
+  resolveUiLanguage,
+  setActiveUiLanguage,
+  uiText,
+} from '@/utils/ui-language';
 import { clearVideo as clearTranslations } from './subtitle-cache';
 
 // AI subtitle segmentation: read from chrome.storage.local at runtime
@@ -44,15 +56,19 @@ let isSourceOnly = false;
 let activeVideoId: string | null = null;
 let activeCues: SubtitleCue[] | null = null;
 let rollingAbortRef: AbortController | null = null;
+let uiLanguage: UiLanguage = getActiveUiLanguage();
+let sourceOnlyLanguageLabel: string | null = null;
 
-export function initYouTubeSubtitles(): void {
+export function initYouTubeSubtitles(language: UiLanguage = getActiveUiLanguage()): void {
+  uiLanguage = language;
+  setActiveUiLanguage(language);
   buttonReady = injectButton();
   document.addEventListener('yt-navigate-finish', () => {
     if (isActive) cancelPipeline();
     // Intercepted timedtext survives SPA navigation — drop other videos' payloads
     // so a stale one can never be picked up (and so the map can't grow unbounded).
     pruneInterceptedTracks(getVideoId());
-    if (!document.querySelector('.b3rys-yt-btn')) buttonReady = injectButton();
+    if (!document.querySelector('.web-translate-yt-btn')) buttonReady = injectButton();
   });
 
   // Apply initial visibility
@@ -69,7 +85,21 @@ export function initYouTubeSubtitles(): void {
 
   // Restart rolling translation when target language changes
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[LANG_STORAGE_KEY]) return;
+    if (area !== 'local') return;
+
+    if (changes[UI_LANGUAGE_STORAGE_KEY]) {
+      uiLanguage = resolveUiLanguage(changes[UI_LANGUAGE_STORAGE_KEY].newValue);
+      setActiveUiLanguage(uiLanguage);
+      button?.setLanguage(uiLanguage);
+      if (isSourceOnly && sourceOnlyLanguageLabel) {
+        button?.setState(
+          'active',
+          uiText('ytOriginalOnlyTitle', uiLanguage, { language: sourceOnlyLanguageLabel }),
+        );
+      }
+    }
+
+    if (!changes[LANG_STORAGE_KEY]) return;
     if (!isActive || !activeVideoId || !activeCues || !abortController) return;
     // Never restart translation for a video the user has already left — that
     // would spend API calls on the previous video and fill its cache bucket.
@@ -82,7 +112,7 @@ export function initYouTubeSubtitles(): void {
     const signal = abortController.signal;
     signal.addEventListener('abort', () => rollingAbortRef!.abort(), { once: true });
     startRollingTranslation(activeVideoId, activeCues, rollingAbortRef.signal);
-    console.log('[b3rys] Language changed — restarting subtitle translation');
+    console.log('[web-translate] Language changed — restarting subtitle translation');
   });
 
   // Listen for toggle from popup
@@ -108,7 +138,7 @@ export function destroyYouTubeSubtitles(): void {
 }
 
 async function injectButton(): Promise<void> {
-  button = await injectYtPlayerButton(handleButtonClick);
+  button = await injectYtPlayerButton(handleButtonClick, uiLanguage);
 }
 
 function cancelPipeline(): void {
@@ -118,10 +148,11 @@ function cancelPipeline(): void {
   activeVideoId = null;
   activeCues = null;
   stopOverlay();
-  window.postMessage({ type: '__b3rys_restore_captions' });
+  window.postMessage({ type: '__web_translate_restore_captions' });
   isActive = false;
   currentMode = 'both';
   isSourceOnly = false;
+  sourceOnlyLanguageLabel = null;
   button?.setState('idle');
 }
 
@@ -141,7 +172,7 @@ async function getTargetLanguage(): Promise<string> {
  * Used when there is simply nothing to translate — not a failure.
  */
 function showNotice(message: string): void {
-  console.log(`[b3rys] ${message}`);
+  console.log(`[web-translate] ${message}`);
   cancelPipeline();
   button?.setState('info', message);
   setTimeout(() => button?.setState('idle'), 4000);
@@ -183,7 +214,7 @@ async function semanticMergeCues(cues: SubtitleCue[], signal: AbortSignal): Prom
       .trim();
 
     console.log(
-      `[b3rys] Punctuation (batch ${Math.floor(i / SEGMENT_BATCH_SIZE) + 1}):`,
+      `[web-translate] Punctuation (batch ${Math.floor(i / SEGMENT_BATCH_SIZE) + 1}):`,
       punctuated.slice(0, 200),
     );
 
@@ -237,7 +268,7 @@ async function handleButtonClick(): Promise<void> {
     // Source-only captions have no translation to cycle through — click turns off.
     if (isSourceOnly) {
       cancelPipeline();
-      console.log('[b3rys] Source-only captions OFF');
+      console.log('[web-translate] Source-only captions OFF');
       return;
     }
     if (currentMode === 'both') {
@@ -246,12 +277,12 @@ async function handleButtonClick(): Promise<void> {
       currentMode = 'ko';
     } else {
       cancelPipeline();
-      console.log('[b3rys] Translate OFF');
+      console.log('[web-translate] Translate OFF');
       return;
     }
     setDisplayMode(currentMode);
     button?.setMode(currentMode);
-    console.log(`[b3rys] Display mode: ${currentMode}`);
+    console.log(`[web-translate] Display mode: ${currentMode}`);
     return;
   }
 
@@ -268,7 +299,7 @@ async function handleButtonClick(): Promise<void> {
   button?.setState('loading');
 
   try {
-    window.postMessage({ type: '__b3rys_trigger_captions' });
+    window.postMessage({ type: '__web_translate_trigger_captions' });
 
     const tracks = await fetchCaptionTracks();
     if (signal.aborted) return;
@@ -276,13 +307,13 @@ async function handleButtonClick(): Promise<void> {
     const track = await pickSourceLanguageTrack(tracks);
     if (!track) {
       // No caption tracks on this video at all — nothing to work with.
-      showNotice('이 영상에는 자막이 없습니다');
+      showNotice(uiText('ytNoCaptions', uiLanguage));
       return;
     }
 
     // If the only available caption language already matches the target
     // (e.g. a Korean video with target=Korean), there is nothing to translate.
-    // Show the original captions in the b3rys overlay (no translation line).
+    // Show the original captions in the web-translate overlay (no translation line).
     const targetLang = await getTargetLanguage();
     const sourceOnly = baseLanguage(track.languageCode) === baseLanguage(targetLang);
 
@@ -290,7 +321,7 @@ async function handleButtonClick(): Promise<void> {
     if (signal.aborted) return;
 
     if (cues.length === 0) {
-      console.log('[b3rys] No subtitle cues found');
+      console.log('[web-translate] No subtitle cues found');
       cancelPipeline();
       button?.setState('error');
       setTimeout(() => button?.setState('idle'), 3000);
@@ -305,11 +336,11 @@ async function handleButtonClick(): Promise<void> {
     let merged: SubtitleCue[];
     if (isManual) {
       merged = postProcessCues(cues, 85, 0.1);
-      console.log(`[b3rys] Manual subs: ${cues.length} cues (no merge needed)`);
+      console.log(`[web-translate] Manual subs: ${cues.length} cues (no merge needed)`);
     } else {
       merged = SUBTITLE_LINE_MODE === 'two-line' ? mergeCuesTwoLine(cues) : mergeCues(cues);
       console.log(
-        `[b3rys] ASR ${SUBTITLE_LINE_MODE === 'two-line' ? '2-line' : '1-line'} merge: ${cues.length} cues → ${merged.length} chunks`,
+        `[web-translate] ASR ${SUBTITLE_LINE_MODE === 'two-line' ? '2-line' : '1-line'} merge: ${cues.length} cues → ${merged.length} chunks`,
       );
     }
 
@@ -320,11 +351,15 @@ async function handleButtonClick(): Promise<void> {
       isSourceOnly = true;
       const langLabel =
         LANGUAGES[track.languageCode as LanguageCode]?.nativeName ?? track.languageCode;
-      flashOverlayNotice(`원문 자막 (${langLabel}) · 번역 없음`);
-      button?.setState('active', `원문 자막 (${langLabel}) · 클릭: 끄기`);
+      sourceOnlyLanguageLabel = langLabel;
+      flashOverlayNotice(uiText('ytOriginalOnly', uiLanguage, { language: langLabel }));
+      button?.setState(
+        'active',
+        uiText('ytOriginalOnlyTitle', uiLanguage, { language: langLabel }),
+      );
       activeVideoId = videoId;
       activeCues = merged;
-      console.log(`[b3rys] Source-only captions (${track.languageCode}) — no translation`);
+      console.log(`[web-translate] Source-only captions (${track.languageCode}) — no translation`);
       return;
     }
 
@@ -346,14 +381,14 @@ async function handleButtonClick(): Promise<void> {
         selectedModel?: string;
       }>(['ytAiSubtitleEnabled', 'selectedModel']);
       console.log(
-        `[b3rys] AI subtitle check: enabled=${ytAiSubtitleEnabled}, model=${selectedModel}`,
+        `[web-translate] AI subtitle check: enabled=${ytAiSubtitleEnabled}, model=${selectedModel}`,
       );
       if (ytAiSubtitleEnabled !== false) {
         semanticMergeCues(cues, signal)
           .then((semanticMerged) => {
             if (signal.aborted) return;
             console.log(
-              `[b3rys] Semantic refinement: ${merged.length} → ${semanticMerged.length} chunks`,
+              `[web-translate] Semantic refinement: ${merged.length} → ${semanticMerged.length} chunks`,
             );
 
             // Hot-swap cues in overlay
@@ -369,7 +404,7 @@ async function handleButtonClick(): Promise<void> {
           })
           .catch((err) => {
             if (!signal.aborted) {
-              console.warn('[b3rys] Semantic refinement failed, keeping heuristic:', err);
+              console.warn('[web-translate] Semantic refinement failed, keeping heuristic:', err);
             }
           });
       }
@@ -380,7 +415,7 @@ async function handleButtonClick(): Promise<void> {
         markContextInvalidated();
         return;
       }
-      console.error('[b3rys] Subtitle error:', err);
+      console.error('[web-translate] Subtitle error:', err);
       cancelPipeline();
       button?.setState('error');
       setTimeout(() => button?.setState('idle'), 3000);

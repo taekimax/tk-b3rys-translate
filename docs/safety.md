@@ -1,7 +1,12 @@
 # 안전 장치 & 상태 머신
 
-> 번역 루프, 경쟁 조건, API 비용 폭주를 방지하는 보호 메커니즘.
+> 번역 루프, 경쟁 조건, native 요청·메모리 폭주를 방지하는 보호 메커니즘.
 > 버그 수정 시 이 문서를 참고하여 보호 장치를 우회하지 않도록 주의.
+
+> 참고: 이 문서의 아래 rate-limit 예시는 이전 cloud-engine 설계에서 남은
+> 역사적 기록이다. 현재 local-MLX 구현의 실제 최종 경계는
+> `entrypoints/content`의 circuit breaker와 `entrypoints/background.ts`의
+> `SerialPriorityQueue`이며, cloud API나 API key는 사용하지 않는다.
 
 ---
 
@@ -285,17 +290,17 @@ MutationObserver 콜백
   │
   │ 새 노드 추가됨
   │
-  ├─ isB3rysElement() 체크:
+  ├─ isWebTranslateElement() 체크:
   │   │
-  │   ├─ data-b3rys-* 속성 있음?  → 무시 (자체 변경)
-  │   │   예: data-b3rys-original
-  │   │       data-b3rys-translated
-  │   │       data-b3rys-id
+  │   ├─ data-web-translate-* 속성 있음?  → 무시 (자체 변경)
+  │   │   예: data-web-translate-original
+  │   │       data-web-translate-translated
+  │   │       data-web-translate-id
   │   │
-  │   ├─ b3rys-* 클래스 있음?     → 무시 (자체 변경)
-  │   │   예: b3rys-translation
-  │   │       b3rys-translation-inline
-  │   │       b3rys-loader
+  │   ├─ web-translate-* 클래스 있음?     → 무시 (자체 변경)
+  │   │   예: web-translate-translation
+  │   │       web-translate-translation-inline
+  │   │       web-translate-loader
   │   │
   │   └─ 둘 다 없음?             → hasNewContent = true
   │
@@ -315,13 +320,13 @@ MutationObserver 콜백
   ⚠️ 패턴 매칭 방식:
   │   ┌──────────────────────────────────────────┐
   │   │ for (const attr of el.attributes) {      │
-  │   │   if (attr.name.startsWith('data-b3rys'))│
+  │   │   if (attr.name.startsWith('data-web-translate'))│
   │   │     return true;  // 자체 변경             │
   │   │ }                                        │
-  │   │ if (el.className.includes('b3rys-'))     │
+  │   │ if (el.className.includes('web-translate-'))     │
   │   │   return true;    // 자체 변경             │
   │   └──────────────────────────────────────────┘
-  │   → 새 data-b3rys-* 속성 추가 시 자동으로 필터됨
+  │   → 새 data-web-translate-* 속성 추가 시 자동으로 필터됨
   │   → 개별 속성 열거 방식보다 안전
 ```
 
@@ -434,7 +439,7 @@ MutationObserver 콜백
 │                                                              │
 │  ❌ 무조건 startTranslation()                                 │
 │     → 자체 DOM 변경이 트리거일 수 있음                          │
-│     → isB3rysElement() 필터를 우회하는 변경이면 루프             │
+│     → isWebTranslateElement() 필터를 우회하는 변경이면 루프             │
 │                                                              │
 │  ✅ state='done'일 때만 증분 startTranslation()                │
 │     → 기존 BLOCK_ID 보존                                      │
@@ -482,7 +487,7 @@ MutationObserver 콜백
   │       → generation counter, circuit breaker 등      │
   │                                                     │
   │  □ 2. Observer 무한 루프를 유발하지 않는가?           │
-  │       → DOM 변경 시 isB3rysElement() 필터 통과 여부  │
+  │       → DOM 변경 시 isWebTranslateElement() 필터 통과 여부  │
   │                                                     │
   │  □ 3. 수동 복구 경로가 있는가?                       │
   │       → 사용자가 FAB 클릭으로 상태를 리셋할 수 있어야│

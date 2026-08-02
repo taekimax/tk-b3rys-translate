@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 /**
- * b3rys DOM Capture — 브라우저 콘솔에서 실행
+ * web-translate DOM Capture — 브라우저 콘솔에서 실행
  *
  * 사용법:
  *   1. 대상 페이지를 Chrome에서 열기
@@ -8,8 +8,8 @@
  *   3. 콘솔 출력에서 fixture HTML을 복사 → tests/fixtures/{name}.html 로 저장
  *
  * 옵션:
- *   b3rysCaptureDOM()                    — 자동 선택 (article > main > body)
- *   b3rysCaptureDOM('article.post-content')  — 특정 selector 지정
+ *   webTranslateCaptureDOM()                    — 자동 선택 (article > main > body)
+ *   webTranslateCaptureDOM('article.post-content')  — 특정 selector 지정
  */
 (() => {
   const REMOVE_TAGS = new Set([
@@ -24,7 +24,7 @@
     'CANVAS',
     'TEMPLATE',
   ]);
-  const REMOVE_ATTRS = /^(on\w+|data-(?!b3rys)\S+|jsaction|jscontroller|jsmodel|jsname)$/i;
+  const REMOVE_ATTRS = /^(on\w+|data-(?!web-translate)\S+|jsaction|jscontroller|jsmodel|jsname)$/i;
   const MAX_SIZE = 50 * 1024;
 
   function clean(el) {
@@ -105,7 +105,7 @@
     return blocks;
   }
 
-  window.b3rysCaptureDOM = function (selector) {
+  window.webTranslateCaptureDOM = function (selector) {
     const root = findContentRoot(selector);
     if (!root) {
       console.error('Content root not found');
@@ -136,7 +136,7 @@
     const blocks = analyze(root);
 
     console.log(
-      '%c=== b3rys DOM Capture ===',
+      '%c=== web-translate DOM Capture ===',
       'color: #22c55e; font-weight: bold; font-size: 14px',
     );
     console.log(`Root: <${root.tagName}> class="${root.className}"`);
@@ -166,6 +166,6 @@
     return { fixture, blocks, root: root.tagName + '.' + (root.className || '').split(' ')[0] };
   };
 
-  console.log('%cb3rysCaptureDOM() ready', 'color: #22c55e; font-weight: bold');
-  console.log('Usage: b3rysCaptureDOM()  or  b3rysCaptureDOM("selector")');
+  console.log('%cwebTranslateCaptureDOM() ready', 'color: #22c55e; font-weight: bold');
+  console.log('Usage: webTranslateCaptureDOM()  or  webTranslateCaptureDOM("selector")');
 })();

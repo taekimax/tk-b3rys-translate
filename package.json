@@ -1,24 +1,32 @@
 {
-  "name": "b3rys-translate",
-  "version": "0.5.15",
-  "description": "Bilingual translation Chrome extension — original text with translation below, plus YouTube dual subtitles",
+  "name": "web-translate",
+  "version": "0.6.0",
+  "description": "Bilingual web translation Chrome extension — original text with translation below, plus YouTube dual subtitles",
   "type": "module",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/b3rys/b3rys-translate#readme",
+  "homepage": "https://github.com/taekimax/tk-b3rys-translate#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/b3rys/b3rys-translate.git"
+    "url": "https://github.com/taekimax/tk-b3rys-translate.git"
   },
   "bugs": {
-    "url": "https://github.com/b3rys/b3rys-translate/issues"
+    "url": "https://github.com/taekimax/tk-b3rys-translate/issues"
   },
   "scripts": {
     "dev": "wxt",
+    "prebuild": "node scripts/prepare-distribution-assets.mjs",
     "build": "wxt build",
+    "prezip": "node scripts/prepare-distribution-assets.mjs",
     "zip": "wxt zip",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "verify:distribution": "node scripts/verify-distribution-assets.mjs",
+    "build:native-host": "native-host/build-release.sh",
+    "package:hy-mt2-7b": "node scripts/package-hy-mt2-7b.mjs",
+    "package:standalone:macos": "node scripts/package-standalone-macos.mjs",
+    "verify:standalone": "node scripts/verify-standalone-distribution.mjs",
+    "package:release": "npm run build && npm run zip && npm run package:hy-mt2-7b && npm run package:standalone:macos",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

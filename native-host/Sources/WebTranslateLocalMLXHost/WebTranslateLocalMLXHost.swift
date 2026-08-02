@@ -14,7 +14,7 @@ private let maximumMessageBytes = 8 * 1024 * 1024
 /// generation cutoffs from validation failures without retaining browsing
 /// content on disk.
 private enum TranslationDiagnostics {
-  private static let directoryName = "b3rys-translate/diagnostics"
+  private static let directoryName = "web-translate/diagnostics"
   private static let fileName = "translation-failures.jsonl"
   private static let maximumBytes = 256 * 1024
   private static let lock = NSLock()
@@ -86,10 +86,10 @@ private enum TranslationDiagnostics {
   }
 }
 
-private enum B3rysModelRegistration {
-  /// MLX Swift supports the Gemma families directly. Hy-MT2 uses its own
-  /// Hunyuan architecture, so register the local implementation before the
-  /// factory examines a downloaded Hy model configuration.
+private enum WebTranslateModelRegistration {
+  /// MLX Swift supports the TranslateGemma architecture directly. Hy-MT2 uses
+  /// its own Hunyuan architecture, so register the local implementation before
+  /// the factory examines a downloaded Hy model configuration.
   static func registerModelTypes() async {
     await LLMTypeRegistry.shared.registerModelType(
       "hunyuan_v1_dense",
@@ -105,8 +105,6 @@ private enum B3rysModelRegistration {
 }
 
 private enum LocalModel: String, Codable, CaseIterable {
-  case gemma4E4B = "gemma4-e4b-q4"
-  case gemma4_12B = "gemma4-12b-q4"
   case translateGemma4B = "translategemma-4b-it-q4"
   case translateGemma12B = "translategemma-12b-it-q4"
   case hy18B = "hy-mt2-1.8b-q4"
@@ -114,8 +112,6 @@ private enum LocalModel: String, Codable, CaseIterable {
 
   var directory: String {
     switch self {
-    case .gemma4E4B: "gemma4-e4b-q4/475b9088d29754a3379866cf5aeb6b41acd313c2"
-    case .gemma4_12B: "gemma4-12b-q4/73bcf09092aa277861d5a191b989b666f7f32e8f"
     case .translateGemma4B: "translategemma-4b-it-q4/5788ec08c047f3f2e17808101b8d9566ac930d58"
     case .translateGemma12B: "translategemma-12b-it-q4/f3dcfd54df14672fbcf0731086fb47a797a943ae"
     case .hy18B: "hy-mt2-1.8b-q4/e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912"
@@ -125,8 +121,6 @@ private enum LocalModel: String, Codable, CaseIterable {
 
   var repository: String {
     switch self {
-    case .gemma4E4B: "mlx-community/gemma-4-e4b-it-4bit"
-    case .gemma4_12B: "mlx-community/gemma-4-12B-it-4bit"
     case .translateGemma4B: "mlx-community/translategemma-4b-it-4bit"
     case .translateGemma12B: "mlx-community/translategemma-12b-it-4bit"
     case .hy18B: "mlx-community/Hy-MT2-1.8B-4bit"
@@ -136,12 +130,17 @@ private enum LocalModel: String, Codable, CaseIterable {
 
   var revision: String {
     switch self {
-    case .gemma4E4B: "475b9088d29754a3379866cf5aeb6b41acd313c2"
-    case .gemma4_12B: "73bcf09092aa277861d5a191b989b666f7f32e8f"
     case .translateGemma4B: "5788ec08c047f3f2e17808101b8d9566ac930d58"
     case .translateGemma12B: "f3dcfd54df14672fbcf0731086fb47a797a943ae"
     case .hy18B: "e5c6fe56c7b3bc77fae5ae92db31f2178f1e6912"
     case .hy7B: "9b7204bdb161490a8ce49ce607c1310cc3fd03ad"
+    }
+  }
+
+  var requiresTermsAcceptance: Bool {
+    switch self {
+    case .translateGemma4B, .translateGemma12B: true
+    case .hy18B, .hy7B: false
     }
   }
 }
@@ -204,17 +203,6 @@ private extension LocalModel {
         runtimeContextTokens: 4_096,
         maximumOutputTokens: 2_048,
         decoding: .greedy
-      )
-    case .gemma4E4B, .gemma4_12B:
-      // Gemma 4's published generation config uses temperature 1.0,
-      // top-p 0.95, and top-k 64. The 16K operational context keeps the
-      // Q4 models responsive on a local machine while preserving a 4K
-      // completion window for translation.
-      return .init(
-        maximumInputTokens: 12_288,
-        runtimeContextTokens: 16_384,
-        maximumOutputTokens: 4_096,
-        decoding: .sampled(temperature: 1.0, topP: 0.95, topK: 64, repetitionPenalty: nil)
       )
     }
   }
@@ -382,8 +370,11 @@ private final class Engine {
   }
 
   func modelRoot() -> URL {
-    if let configured = ProcessInfo.processInfo.environment["B3RYS_MODEL_ROOT"], !configured.isEmpty {
-      return URL(filePath: configured, directoryHint: .isDirectory).standardizedFileURL
+    let environment = ProcessInfo.processInfo.environment
+    for key in ["WEB_TRANSLATE_MODEL_ROOT", "B3RYS_MODEL_ROOT"] {
+      if let configured = environment[key], !configured.isEmpty {
+        return URL(filePath: configured, directoryHint: .isDirectory).standardizedFileURL
+      }
     }
     let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
     var current = executable.deletingLastPathComponent()
@@ -392,9 +383,17 @@ private final class Engine {
       if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
       current.deleteLastPathComponent()
     }
-    return FileManager.default.homeDirectoryForCurrentUser
+    let preferred = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/web-translate/models", directoryHint: .isDirectory)
+      .standardizedFileURL
+    let legacy = FileManager.default.homeDirectoryForCurrentUser
       .appending(path: "Library/Application Support/b3rys-translate/models", directoryHint: .isDirectory)
       .standardizedFileURL
+    if !FileManager.default.fileExists(atPath: preferred.path),
+       FileManager.default.fileExists(atPath: legacy.path) {
+      return legacy
+    }
+    return preferred
   }
 
   private func missingFiles(at directory: URL) -> [String] {
@@ -484,7 +483,10 @@ private final class Engine {
   ) async throws -> PreparedModel {
     let root = root.resolvingSymlinksInPath()
     guard let destination = safeModelDirectory(root: root, model: model) else { throw HostError.modelsNotFound }
-    if missingFiles(at: destination).isEmpty { return .init(path: destination, downloaded: false) }
+    if missingFiles(at: destination).isEmpty {
+      try writeModelTermsNotice(at: destination, model: model)
+      return .init(path: destination, downloaded: false)
+    }
 
     let stagingRoot = root.appending(path: ".downloads", directoryHint: .isDirectory)
     do {
@@ -509,6 +511,7 @@ private final class Engine {
       }
       try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
       try promote(staged: staged, to: destination)
+      try writeModelTermsNotice(at: destination, model: model)
       progressHandler(.init(modelId: model.rawValue, fraction: 1))
       return .init(path: destination, downloaded: true)
     } catch let error as HostError {
@@ -516,6 +519,13 @@ private final class Engine {
     } catch {
       throw HostError.modelDownloadFailed(error.localizedDescription)
     }
+  }
+
+  private func writeModelTermsNotice(at directory: URL, model: LocalModel) throws {
+    guard model.requiresTermsAcceptance else { return }
+    let notice = "Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms\n"
+    let destination = directory.appending(path: "GEMMA_TERMS_NOTICE.txt")
+    try Data(notice.utf8).write(to: destination, options: .atomic)
   }
 
   private func isSymbolicLink(at url: URL) -> Bool {
@@ -589,13 +599,6 @@ private final class Engine {
     let targetName = languageName(target)
 
     switch model {
-    case .gemma4E4B:
-      return "<bos><|turn>user\nTranslate the following \(sourceName) text into \(targetName):\n\n\(sourceText)<turn|>\n<|turn>model\n"
-    case .gemma4_12B:
-      // The non-thinking template opens and immediately closes an empty
-      // thought channel, then the model emits its final answer. Its turn
-      // terminator is `<turn|>` (not `<|turn>`).
-      return "<bos><|turn>user\nTranslate the following \(sourceName) text into \(targetName):\n\n\(sourceText)<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
     case .translateGemma4B, .translateGemma12B:
       // TranslateGemma's template is not a generic chat prompt: its single
       // text item expands to this exact professional-translator instruction.
@@ -648,8 +651,6 @@ private final class Engine {
       stopMarkers = ["<｜hy_place▁holder▁no▁2｜>"]
     case .hy7B:
       stopMarkers = ["<|eos|>", "<|extra_5|>"]
-    default:
-      stopMarkers = ["<turn|>", "<|turn>", "<|eos|>"]
     }
     for marker in stopMarkers where result.hasSuffix(marker) {
       result = String(result.dropLast(marker.count)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -783,11 +784,11 @@ private final class NativeMessageWriter: @unchecked Sendable {
   }
 }
 
-@main struct B3rysLocalMLXHost {
+@main struct WebTranslateLocalMLXHost {
   static func main() async {
     let protocolOut = FileHandle(fileDescriptor: dup(STDOUT_FILENO), closeOnDealloc: true)
     _ = dup2(STDERR_FILENO, STDOUT_FILENO)
-    await B3rysModelRegistration.registerModelTypes()
+    await WebTranslateModelRegistration.registerModelTypes()
     let engine = Engine()
     while let data = readFrame() {
       guard let request = try? JSONDecoder().decode(Request.self, from: data) else { return }

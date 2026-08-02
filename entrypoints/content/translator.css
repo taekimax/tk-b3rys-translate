@@ -11,7 +11,7 @@
 
    replace 모드는 원문을 감추고 번역만 남기는 모드다. 그때 번역문은 원문을
    대신하는 본문이므로 흐리게 하거나 줄이면 안 된다 — 아래에서 되돌린다. */
-.b3rys-translation {
+.web-translate-translation {
   display: block;
   color: inherit; /* color-mix 를 모르는 구형 브라우저 폴백 */
   color: color-mix(in srgb, currentColor 82%, transparent);
@@ -28,7 +28,7 @@
   transition: opacity 0.3s ease;
 }
 
-.b3rys-translation-inline {
+.web-translate-translation-inline {
   color: inherit;
   color: color-mix(in srgb, currentColor 82%, transparent);
   font-family: inherit;
@@ -39,7 +39,7 @@
   transition: opacity 0.3s ease;
 }
 
-.b3rys-loading {
+.web-translate-loading {
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
@@ -47,33 +47,33 @@
   margin-left: 0.4em;
 }
 
-.b3rys-loading-spinner {
+.web-translate-loading-spinner {
   display: inline-block;
   width: 0.75em;
   height: 0.75em;
   border: 1.5px solid rgba(156, 163, 175, 0.3);
   border-top-color: #6b7280;
   border-radius: 50%;
-  animation: b3rys-spin 0.7s linear infinite;
+  animation: web-translate-spin 0.7s linear infinite;
 }
 
-.b3rys-loading [data-b3rys-loader-label] {
+.web-translate-loading [data-web-translate-loader-label] {
   display: none;
 }
 
-.b3rys-loading[data-b3rys-progress='true'] [data-b3rys-loader-label] {
+.web-translate-loading[data-web-translate-progress='true'] [data-web-translate-loader-label] {
   display: inline;
   color: color-mix(in srgb, currentColor 70%, transparent);
   font-size: 0.8em;
 }
 
-@keyframes b3rys-spin {
+@keyframes web-translate-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.b3rys-error {
+.web-translate-error {
   display: block;
   color: #ef4444;
   font-size: 0.8em;
@@ -84,7 +84,7 @@
   border-radius: 0 6px 6px 0;
 }
 
-.b3rys-error-retry {
+.web-translate-error-retry {
   margin-left: 0.6em;
   border: 1px solid currentColor;
   border-radius: 4px;
@@ -95,7 +95,7 @@
   cursor: pointer;
 }
 
-.b3rys-error-retry:disabled {
+.web-translate-error-retry:disabled {
   cursor: wait;
   opacity: 0.6;
 }
@@ -103,24 +103,24 @@
 /* All translation elements must never be scroll anchors.
    This lets browser scroll anchoring keep real content stable
    when translations are shown/hidden/injected. */
-[data-b3rys-translated] {
+[data-web-translate-translated] {
   overflow-anchor: none !important;
 }
 
 /* Hide mode: CSS-hide all translations in a single layout pass (scroll-safe) */
-body.b3rys-hiding-translations [data-b3rys-translated] {
+body.web-translate-hiding-translations [data-web-translate-translated] {
   display: none !important;
 }
 
 /* Replace mode: hide originals, remove translation margins */
-body.b3rys-replace-mode [data-b3rys-original] {
+body.web-translate-replace-mode [data-web-translate-original] {
   display: none;
 }
 /* Fail-safe: translations OFF + replace mode must never hide both sides. */
-body.b3rys-hiding-translations.b3rys-replace-mode [data-b3rys-original] {
+body.web-translate-hiding-translations.web-translate-replace-mode [data-web-translate-original] {
   display: revert;
 }
-body.b3rys-replace-mode .b3rys-translation {
+body.web-translate-replace-mode .web-translate-translation {
   margin-top: 0;
   margin-bottom: 0;
   /* 원문이 사라진 자리라 번역이 곧 본문이다. 흐리게·작게 두면 페이지 전체가
@@ -128,7 +128,7 @@ body.b3rys-replace-mode .b3rys-translation {
   color: inherit;
   font-size: inherit;
 }
-body.b3rys-replace-mode .b3rys-translation-inline {
+body.web-translate-replace-mode .web-translate-translation-inline {
   margin-left: 0;
   color: inherit;
   font-size: inherit;

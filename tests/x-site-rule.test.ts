@@ -46,7 +46,7 @@ describe('X paragraph splitting site rule', () => {
         'The final paragraph closes the argument with a clear conclusion.',
       ]);
       expect(tweet.textContent).toBe(before);
-      expect(tweet.querySelectorAll('[data-b3rys-para]')).toHaveLength(3);
+      expect(tweet.querySelectorAll('[data-web-translate-para]')).toHaveLength(3);
     },
   );
 
@@ -60,7 +60,7 @@ describe('X paragraph splitting site rule', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].element).toBe(reply);
     expect(reply.innerHTML).toBe(originalHtml);
-    expect(reply.querySelector('[data-b3rys-para]')).toBeNull();
+    expect(reply.querySelector('[data-web-translate-para]')).toBeNull();
   });
 
   it('reuses paragraph wrappers when X is detected again', () => {
@@ -71,14 +71,14 @@ describe('X paragraph splitting site rule', () => {
     );
 
     detectTextBlocks(document.body);
-    const wrappers = [...tweet.querySelectorAll('[data-b3rys-para]')];
+    const wrappers = [...tweet.querySelectorAll('[data-web-translate-para]')];
     detectTextBlocks(document.body);
 
-    expect(tweet.querySelectorAll('[data-b3rys-para]')).toHaveLength(2);
-    const reused = [...tweet.querySelectorAll('[data-b3rys-para]')];
+    expect(tweet.querySelectorAll('[data-web-translate-para]')).toHaveLength(2);
+    const reused = [...tweet.querySelectorAll('[data-web-translate-para]')];
     expect(reused[0]).toBe(wrappers[0]);
     expect(reused[1]).toBe(wrappers[1]);
-    expect(tweet.querySelector('[data-b3rys-para] [data-b3rys-para]')).toBeNull();
+    expect(tweet.querySelector('[data-web-translate-para] [data-web-translate-para]')).toBeNull();
   });
 
   it('does not split a Phase 1 block that contains a nested block child', () => {
@@ -92,7 +92,7 @@ describe('X paragraph splitting site rule', () => {
     const blocks = detectTextBlocks(document.body);
 
     expect(blocks.map((block) => block.text)).toEqual(['Attribution paragraph of the quote here.']);
-    expect(quote.querySelector('[data-b3rys-para]')).toBeNull();
+    expect(quote.querySelector('[data-web-translate-para]')).toBeNull();
     expect(quote.firstElementChild?.tagName).toBe('P');
   });
 
@@ -108,7 +108,7 @@ describe('X paragraph splitting site rule', () => {
       'The first semantic paragraph has enough English text.',
       'The second semantic paragraph also has enough English text.',
     ]);
-    expect(document.querySelectorAll('p > [data-b3rys-para]')).toHaveLength(2);
+    expect(document.querySelectorAll('p > [data-web-translate-para]')).toHaveLength(2);
   });
 
   it('leaves a multi-paragraph Korean tweet DOM untouched', () => {
@@ -120,7 +120,7 @@ describe('X paragraph splitting site rule', () => {
 
     expect(blocks).toHaveLength(0);
     expect(tweet.innerHTML).toBe(originalHtml);
-    expect(tweet.querySelector('[data-b3rys-para], [data-b3rys-split]')).toBeNull();
+    expect(tweet.querySelector('[data-web-translate-para], [data-web-translate-split]')).toBeNull();
   });
 
   it('restores the DOM when fewer than two translatable wrappers remain', () => {
@@ -136,7 +136,7 @@ describe('X paragraph splitting site rule', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].element).toBe(tweet);
     expect(tweet.innerHTML).toBe(originalHtml);
-    expect(tweet.querySelector('[data-b3rys-para], [data-b3rys-split]')).toBeNull();
+    expect(tweet.querySelector('[data-web-translate-para], [data-web-translate-split]')).toBeNull();
   });
 
   it('does not split the same nested pre-wrap structure on unrelated sites', () => {
@@ -150,6 +150,6 @@ describe('X paragraph splitting site rule', () => {
 
     expect(blocks).toHaveLength(1);
     expect(blocks[0].element).toBe(tweet);
-    expect(tweet.querySelector('[data-b3rys-para]')).toBeNull();
+    expect(tweet.querySelector('[data-web-translate-para]')).toBeNull();
   });
 });

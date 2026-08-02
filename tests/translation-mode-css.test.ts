@@ -15,8 +15,8 @@ beforeEach(() => {
 
   document.body.className = '';
   document.body.innerHTML =
-    '<p data-b3rys-original>Original text.</p>' +
-    '<p data-b3rys-translated class="b3rys-translation">번역문입니다.</p>';
+    '<p data-web-translate-original>Original text.</p>' +
+    '<p data-web-translate-translated class="web-translate-translation">번역문입니다.</p>';
 });
 
 afterEach(() => {
@@ -27,20 +27,20 @@ afterEach(() => {
 
 describe('translation mode CSS visibility fail-safe', () => {
   it('keeps originals visible when translations are hidden in replace mode', () => {
-    document.body.className = 'b3rys-replace-mode b3rys-hiding-translations';
+    document.body.className = 'web-translate-replace-mode web-translate-hiding-translations';
 
-    const original = document.querySelector<HTMLElement>('[data-b3rys-original]')!;
-    const translation = document.querySelector<HTMLElement>('[data-b3rys-translated]')!;
+    const original = document.querySelector<HTMLElement>('[data-web-translate-original]')!;
+    const translation = document.querySelector<HTMLElement>('[data-web-translate-translated]')!;
 
     expect(getComputedStyle(original).display).not.toBe('none');
     expect(getComputedStyle(translation).display).toBe('none');
   });
 
   it('hides originals when translations are visible in replace mode', () => {
-    document.body.className = 'b3rys-replace-mode';
+    document.body.className = 'web-translate-replace-mode';
 
-    const original = document.querySelector<HTMLElement>('[data-b3rys-original]')!;
-    const translation = document.querySelector<HTMLElement>('[data-b3rys-translated]')!;
+    const original = document.querySelector<HTMLElement>('[data-web-translate-original]')!;
+    const translation = document.querySelector<HTMLElement>('[data-web-translate-translated]')!;
 
     expect(getComputedStyle(original).display).toBe('none');
     expect(getComputedStyle(translation).display).not.toBe('none');

@@ -14,6 +14,7 @@ import {
   initSelectionPopup,
   destroySelectionPopup,
   loadSelectionSourceLanguage,
+  setSelectionUiLanguage,
 } from './content/selection-popup';
 import {
   isContextInvalidated,
@@ -22,21 +23,28 @@ import {
 } from './content/context-invalidated';
 import type { TranslationMode } from '@/types';
 import type { ContentMessage } from '@/utils/messaging';
-import { SKIP_HOSTS, BUILD_TAG } from '@/utils/constants';
+import { SKIP_HOSTS, BUILD_TAG, UI_LANGUAGE_STORAGE_KEY } from '@/utils/constants';
 import { TranslationStateMachine } from '@/utils/translation-state';
 import { dbg } from '@/utils/debug';
+import {
+  loadUiLanguage,
+  resolveUiLanguage,
+  setActiveUiLanguage,
+  uiText,
+} from '@/utils/ui-language';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
 
-  main() {
+  async main() {
+    const uiLanguage = await loadUiLanguage();
     // Identify the running bundle (debug mode only — default console is silent).
     dbg(`content script ${BUILD_TAG}`);
     // Initialize YouTube dual subtitles if on YouTube
     if (location.hostname === 'www.youtube.com') {
       import('./content/youtube/youtube-controller').then(({ initYouTubeSubtitles }) => {
-        initYouTubeSubtitles();
+        initYouTubeSubtitles(uiLanguage);
       });
     }
 
@@ -48,7 +56,7 @@ export default defineContentScript({
     loadSelectionSourceLanguage();
 
     // Selection popup — translate highlighted text
-    initSelectionPopup();
+    initSelectionPopup(uiLanguage);
 
     let lastUrl = location.href;
 
@@ -71,7 +79,7 @@ export default defineContentScript({
         } catch (err) {
           if (isContextInvalidated(err)) {
             markContextInvalidated();
-            fab.showToast('새로고침하세요.');
+            fab.showToast(uiText('refreshPage'));
             return false;
           }
           throw err;
@@ -85,7 +93,7 @@ export default defineContentScript({
         } catch (err) {
           if (isContextInvalidated(err)) {
             markContextInvalidated();
-            fab.showToast('새로고침하세요.');
+            fab.showToast(uiText('refreshPage'));
           }
         }
       },
@@ -93,7 +101,7 @@ export default defineContentScript({
         chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch((err) => {
           if (isContextInvalidated(err)) {
             markContextInvalidated();
-            fab.showToast('새로고침하세요.');
+            fab.showToast(uiText('refreshPage'));
           }
         });
       },
@@ -102,7 +110,7 @@ export default defineContentScript({
     fab = createFloatingButton(async () => {
       dbg('FAB click; state=%s invalidated=%s', sm.state, isMarkedInvalidated());
       if (isMarkedInvalidated()) {
-        fab.showToast('새로고침하세요.');
+        fab.showToast(uiText('refreshPage'));
         return;
       }
       try {
@@ -110,7 +118,7 @@ export default defineContentScript({
       } catch (err) {
         if (isContextInvalidated(err)) {
           markContextInvalidated();
-          fab.showToast('새로고침하세요.');
+          fab.showToast(uiText('refreshPage'));
           return;
         }
         throw err;
@@ -154,6 +162,13 @@ export default defineContentScript({
         sm.setMode(mode);
         fab.setMode(mode);
         setTranslationModeWhenAvailable(mode);
+      }
+
+      if (changes[UI_LANGUAGE_STORAGE_KEY]) {
+        const nextLanguage = resolveUiLanguage(changes[UI_LANGUAGE_STORAGE_KEY].newValue);
+        setActiveUiLanguage(nextLanguage);
+        fab.setLanguage(nextLanguage);
+        setSelectionUiLanguage(nextLanguage);
       }
 
       // Auto-translate flag: only update the flag here — don't auto-translate

@@ -11,10 +11,10 @@ if [[ ! "$extension_id" =~ '^[a-p]{32}$' ]]; then
   exit 64
 fi
 
-install_dir="$HOME/Library/Application Support/b3rys-translate/native-host"
-host_path="$install_dir/b3rys-local-mlx-host"
+install_dir="$HOME/Library/Application Support/web-translate/native-host"
+host_path="$install_dir/web-translate-local-mlx-host"
 metallib_path="$install_dir/mlx.metallib"
-manifest_path="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.b3rys.translate.local_mlx.json"
+manifest_path="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.webtranslate.translate.local_mlx.json"
 
 [[ -x "$host_path" ]] || { print -u2 "Native host is missing or not executable: $host_path"; exit 65; }
 [[ -s "$metallib_path" ]] || { print -u2 "MLX Metal library is missing: $metallib_path"; exit 65; }
@@ -27,7 +27,7 @@ const { spawnSync } = require('node:child_process');
 const [manifestPath, expectedHostPath, extensionId] = process.argv.slice(2);
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const expectedOrigin = `chrome-extension://${extensionId}/`;
-if (manifest.name !== 'com.b3rys.translate.local_mlx' || manifest.type !== 'stdio') {
+if (manifest.name !== 'com.webtranslate.translate.local_mlx' || manifest.type !== 'stdio') {
   throw new Error('Chrome native-host manifest has the wrong name or type');
 }
 if (manifest.path !== expectedHostPath) {

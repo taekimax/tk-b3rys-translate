@@ -28,8 +28,8 @@ function setUrl(videoId: string): void {
 /** Answer the MAIN-world bridge request with a given player response (or null). */
 function stubBridge(data: unknown): () => void {
   const handler = (e: MessageEvent) => {
-    if ((e.data as { type?: string })?.type !== '__b3rys_get_player_response') return;
-    window.postMessage({ type: '__b3rys_player_response', data });
+    if ((e.data as { type?: string })?.type !== '__web_translate_get_player_response') return;
+    window.postMessage({ type: '__web_translate_player_response', data });
   };
   window.addEventListener('message', handler);
   return () => window.removeEventListener('message', handler);

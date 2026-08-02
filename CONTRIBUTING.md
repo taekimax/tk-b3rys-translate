@@ -1,12 +1,12 @@
 # 기여 가이드 (Contributing)
 
-b3rys translate에 관심 가져 주셔서 감사합니다! 버그 리포트, 기능 제안, 코드 기여 모두 환영합니다.
+web-translate에 관심 가져 주셔서 감사합니다! 버그 리포트, 기능 제안, 코드 기여 모두 환영합니다.
 
 ## 시작하기
 
 ```bash
-git clone https://github.com/b3rys/b3rys-translate.git
-cd b3rys-translate
+git clone https://github.com/taekimax/tk-b3rys-translate.git
+cd tk-b3rys-translate
 npm install
 npm run dev      # HMR 개발 모드 (Chrome 자동 로드)
 ```
@@ -33,13 +33,13 @@ npm run dev      # HMR 개발 모드 (Chrome 자동 로드)
 
 ### ⚠️ 위험 영역 (수정 전 문서 필독)
 
-아래 영역은 무한 루프·경쟁 조건·API 비용 폭주 위험이 있어, 수정 전 `docs/`의 해당 문서를 반드시 읽어 주세요.
+아래 영역은 무한 루프·경쟁 조건·native 모델 메모리 폭주 위험이 있어, 수정 전 `docs/`의 해당 문서를 반드시 읽어 주세요.
 
-| 수정 대상                                    | 참고 문서                            | 핵심 위험                                |
-| -------------------------------------------- | ------------------------------------ | ---------------------------------------- |
-| `content.ts`, `observer.ts`, `background.ts` | [docs/safety.md](docs/safety.md)     | Observer 무한 루프, 경쟁 조건, 비용 폭주 |
-| `text-detector.ts`, `translator.ts`          | [docs/pipeline.md](docs/pipeline.md) | 감지 중복, 주입 경로 오류                |
-| `youtube/`                                   | [docs/pipeline.md](docs/pipeline.md) | 자막 파이프라인 오류                     |
+| 수정 대상                                    | 참고 문서                            | 핵심 위험                                       |
+| -------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
+| `content.ts`, `observer.ts`, `background.ts` | [docs/safety.md](docs/safety.md)     | Observer 무한 루프, 경쟁 조건, native 요청 폭주 |
+| `text-detector.ts`, `translator.ts`          | [docs/pipeline.md](docs/pipeline.md) | 감지 중복, 주입 경로 오류                       |
+| `youtube/`                                   | [docs/pipeline.md](docs/pipeline.md) | 자막 파이프라인 오류                            |
 
 **절대 위반 금지**
 

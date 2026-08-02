@@ -207,7 +207,7 @@ describe('Skilljar fixture skipSelectors', () => {
     const label = statItem.querySelector('.clp__stat-label')!;
     const translated = label.querySelector(`[${DATA_ATTRS.TRANSLATED}]`);
     expect(translated).not.toBeNull();
-    expect(translated!.className).toContain('b3rys-translation-inline');
+    expect(translated!.className).toContain('web-translate-translation-inline');
 
     // Original label text preserved, translation appended inside
     expect(label.textContent).toContain('lectures');
@@ -297,7 +297,7 @@ describe('Skilljar full page fixture', () => {
     const translated = faqTitle.querySelector(`span[${DATA_ATTRS.TRANSLATED}]`);
     expect(translated).not.toBeNull();
     expect(translated!.textContent).toContain('Skilljar란');
-    expect(translated!.className).toBe('b3rys-translation');
+    expect(translated!.className).toBe('web-translate-translation');
   });
 });
 
@@ -332,7 +332,7 @@ describe('GitHub Settings fixture', () => {
     const translated = labelBlock!.element.querySelector(`[${DATA_ATTRS.TRANSLATED}]`);
     expect(translated).not.toBeNull();
     // Must be block class, not inline — LABEL always gets block treatment
-    expect(translated!.className).toContain('b3rys-translation');
+    expect(translated!.className).toContain('web-translate-translation');
     expect(translated!.className).not.toContain('inline');
   });
 

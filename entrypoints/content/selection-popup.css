@@ -3,7 +3,7 @@
 }
 
 /* Trigger button — small circle near selection */
-.b3rys-sel-trigger {
+.web-translate-sel-trigger {
   position: fixed;
   z-index: 2147483647;
   width: 24px;
@@ -28,23 +28,23 @@
   animation: selFadeIn 0.15s ease forwards;
 }
 
-.b3rys-sel-trigger:hover {
+.web-translate-sel-trigger:hover {
   background: rgba(34, 197, 94, 0.15);
   transform: scale(1.1);
 }
 
-.b3rys-sel-trigger:active {
+.web-translate-sel-trigger:active {
   transform: scale(0.95);
 }
 
-.b3rys-sel-trigger svg {
+.web-translate-sel-trigger svg {
   width: 12px;
   height: 12px;
   color: #7ee787;
 }
 
 /* Popup panel */
-.b3rys-sel-popup {
+.web-translate-sel-popup {
   position: absolute;
   z-index: 2147483647;
   min-width: 300px;
@@ -60,19 +60,19 @@
   animation: selFadeIn 0.15s ease forwards;
 }
 
-.b3rys-sel-popup-inner {
+.web-translate-sel-popup-inner {
   padding: 16px;
 }
 
 /* Loading state */
-.b3rys-sel-loading {
+.web-translate-sel-loading {
   display: flex;
   align-items: center;
   gap: 8px;
   color: #9ca3af;
 }
 
-.b3rys-sel-spinner {
+.web-translate-sel-spinner {
   width: 16px;
   height: 16px;
   color: #7ee787;
@@ -80,13 +80,13 @@
 }
 
 /* Result state */
-.b3rys-sel-result {
+.web-translate-sel-result {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.b3rys-sel-text {
+.web-translate-sel-text {
   font-size: 15px;
   line-height: 1.75;
   word-break: break-word;
@@ -95,21 +95,21 @@
 }
 
 /* Sentence-separated display for long translations */
-.b3rys-sel-sentence {
+.web-translate-sel-sentence {
   display: block;
   margin-bottom: 6px;
 }
 
-.b3rys-sel-sentence:last-child {
+.web-translate-sel-sentence:last-child {
   margin-bottom: 0;
 }
 
-.b3rys-sel-actions {
+.web-translate-sel-actions {
   display: flex;
   justify-content: flex-end;
 }
 
-.b3rys-sel-copy {
+.web-translate-sel-copy {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -124,27 +124,27 @@
   padding: 0;
 }
 
-.b3rys-sel-copy:hover {
+.web-translate-sel-copy:hover {
   background: rgba(126, 231, 135, 0.1);
 }
 
-.b3rys-sel-copy svg {
+.web-translate-sel-copy svg {
   width: 16px;
   height: 16px;
 }
 
 /* Compact popup (word mode) */
-.b3rys-sel-popup.compact {
+.web-translate-sel-popup.compact {
   min-width: 200px;
   max-width: 380px;
 }
 
-.b3rys-sel-popup.compact .b3rys-sel-popup-inner {
+.web-translate-sel-popup.compact .web-translate-sel-popup-inner {
   padding: 10px;
 }
 
 /* Word mode header: "word — translation" + speak */
-.b3rys-sel-word-header {
+.web-translate-sel-word-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -153,7 +153,7 @@
   line-height: 1.4;
 }
 
-.b3rys-sel-speak {
+.web-translate-sel-speak {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -171,33 +171,33 @@
   flex-shrink: 0;
 }
 
-.b3rys-sel-speak:hover {
+.web-translate-sel-speak:hover {
   color: #7ee787;
   background: rgba(126, 231, 135, 0.1);
 }
 
-.b3rys-sel-speak svg {
+.web-translate-sel-speak svg {
   width: 14px;
   height: 14px;
 }
 
-.b3rys-sel-word-original {
+.web-translate-sel-word-original {
   font-weight: 700;
   color: #e5e5e5;
 }
 
-.b3rys-sel-word-dash {
+.web-translate-sel-word-dash {
   color: #6b7280;
   margin: 0 2px;
 }
 
-.b3rys-sel-word-translation {
+.web-translate-sel-word-translation {
   font-weight: 700;
   color: #7ee787;
 }
 
 /* English definition */
-.b3rys-sel-word-definition {
+.web-translate-sel-word-definition {
   font-size: 12px;
   color: #9ca3af;
   line-height: 1.4;
@@ -205,37 +205,37 @@
 }
 
 /* Similar words */
-.b3rys-sel-word-similar {
+.web-translate-sel-word-similar {
   font-size: 12px;
   color: #9ca3af;
   line-height: 1.4;
   margin-top: 2px;
 }
 
-.b3rys-sel-word-similar-label {
+.web-translate-sel-word-similar-label {
   color: #6b7280;
 }
 
-.b3rys-sel-word-similar-word {
+.web-translate-sel-word-similar-word {
   color: #7ee787;
 }
 
 /* Separator */
-.b3rys-sel-separator {
+.web-translate-sel-separator {
   height: 1px;
   background: rgba(255, 255, 255, 0.1);
   margin: 4px 0;
 }
 
 /* Example sentences */
-.b3rys-sel-example-en {
+.web-translate-sel-example-en {
   font-size: 13px;
   color: #9ca3af;
   line-height: 1.5;
   margin-top: 6px;
 }
 
-.b3rys-sel-example-ko {
+.web-translate-sel-example-ko {
   font-size: 13px;
   color: #e5e5e5;
   line-height: 1.5;
@@ -243,13 +243,13 @@
 }
 
 /* Highlighted word in example sentences */
-.b3rys-sel-highlight {
+.web-translate-sel-highlight {
   color: #7ee787;
   font-weight: 600;
 }
 
 /* Error state */
-.b3rys-sel-error {
+.web-translate-sel-error {
   color: #f85149;
   font-size: 13px;
 }

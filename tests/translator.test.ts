@@ -42,7 +42,7 @@ describe('Nav LI injection (GitHub ActionList pattern)', () => {
     expect(translated).toBeDefined();
     // Translation should be inside the <span class="label">, not directly under <li>
     expect(translated.parentElement!.classList.contains('label')).toBe(true);
-    expect(translated.className).toBe('b3rys-translation-inline');
+    expect(translated.className).toBe('web-translate-translation-inline');
   });
 
   it('injects inside <a> fallback when no deeper label found (inside nav)', () => {
@@ -59,7 +59,7 @@ describe('Nav LI injection (GitHub ActionList pattern)', () => {
     const translated = li.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
     expect(translated).toBeDefined();
     expect(translated.parentElement!.tagName).toBe('A');
-    expect(translated.className).toBe('b3rys-translation-inline');
+    expect(translated.className).toBe('web-translate-translation-inline');
   });
 
   it('uses inline treatment for short LI outside <nav> (≤60 chars)', () => {
@@ -73,7 +73,7 @@ describe('Nav LI injection (GitHub ActionList pattern)', () => {
 
     const translated = li.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
     expect(translated).toBeDefined();
-    expect(translated.className).toBe('b3rys-translation-inline');
+    expect(translated.className).toBe('web-translate-translation-inline');
   });
 });
 
@@ -88,7 +88,7 @@ describe('Inline vs block class', () => {
     injectTranslation(p, '짧은 텍스트');
 
     const translated = p.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
-    expect(translated.className).toBe('b3rys-translation');
+    expect(translated.className).toBe('web-translate-translation');
   });
 
   it('uses block class for long P text (>60 chars)', () => {
@@ -99,7 +99,7 @@ describe('Inline vs block class', () => {
     injectTranslation(p, '이것은 인라인 제한을 확실히 초과하는 긴 문단입니다.');
 
     const translated = p.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
-    expect(translated.className).toBe('b3rys-translation');
+    expect(translated.className).toBe('web-translate-translation');
   });
 
   it('uses block class for H1-H6 regardless of text length', () => {
@@ -111,7 +111,7 @@ describe('Inline vs block class', () => {
       injectTranslation(heading as HTMLElement, '짧음');
 
       const translated = heading.querySelector(`[${DATA_ATTRS.TRANSLATED}]`)!;
-      expect(translated.className).toBe('b3rys-translation');
+      expect(translated.className).toBe('web-translate-translation');
     }
   });
 });
@@ -246,7 +246,7 @@ describe('Injection roundtrip', () => {
   });
 
   it('wraps loose text only when entering replace mode, unwraps on parallel', () => {
-    setupDOM('<p data-b3rys-id="b3rys-950">Plain text node content here.</p>');
+    setupDOM('<p data-web-translate-id="web-translate-950">Plain text node content here.</p>');
     const p = document.querySelector('p')!;
     injectTranslation(p, '번역된 텍스트');
 
@@ -303,32 +303,33 @@ describe('Injection roundtrip', () => {
 
   it('toggles body class with setTranslationMode', () => {
     setTranslationMode('replace');
-    expect(document.body.classList.contains('b3rys-replace-mode')).toBe(true);
+    expect(document.body.classList.contains('web-translate-replace-mode')).toBe(true);
 
     setTranslationMode('parallel');
-    expect(document.body.classList.contains('b3rys-replace-mode')).toBe(false);
+    expect(document.body.classList.contains('web-translate-replace-mode')).toBe(false);
   });
 
   it('does not apply replace mode while translations are hidden', () => {
     setupDOM(
-      '<p data-b3rys-original>Original text remains visible.</p>' +
-        '<p data-b3rys-translated>숨겨진 번역문입니다.</p>',
+      '<p data-web-translate-original>Original text remains visible.</p>' +
+        '<p data-web-translate-translated>숨겨진 번역문입니다.</p>',
     );
-    document.body.classList.add('b3rys-hiding-translations');
+    document.body.classList.add('web-translate-hiding-translations');
 
     setTranslationModeWhenAvailable('replace');
 
-    expect(document.body.classList.contains('b3rys-replace-mode')).toBe(false);
+    expect(document.body.classList.contains('web-translate-replace-mode')).toBe(false);
   });
 
   it('applies replace mode while translations are visible', () => {
     setupDOM(
-      '<p data-b3rys-original>Original text.</p>' + '<p data-b3rys-translated>번역문입니다.</p>',
+      '<p data-web-translate-original>Original text.</p>' +
+        '<p data-web-translate-translated>번역문입니다.</p>',
     );
 
     setTranslationModeWhenAvailable('replace');
 
-    expect(document.body.classList.contains('b3rys-replace-mode')).toBe(true);
+    expect(document.body.classList.contains('web-translate-replace-mode')).toBe(true);
   });
 
   it('replaces previous translation on re-injection (only 1 translation exists)', () => {
@@ -349,7 +350,7 @@ describe('Injection roundtrip', () => {
 // ============================================================
 // Regression: on flex/grid blocks the translation is injected into a *descendant*
 // text child. If markOriginalContent marked that child's ancestor as original,
-// `body.b3rys-replace-mode [data-b3rys-original]{display:none}` hid the whole
+// `body.web-translate-replace-mode [data-web-translate-original]{display:none}` hid the whole
 // branch — translation and all — so the body content vanished in Korean-only mode.
 
 describe('Replace mode visibility', () => {
@@ -471,8 +472,8 @@ describe('Sole-link card injection — semantic wrapper (LI)', () => {
 describe('Cancel releases untranslated claims (virtualized-list stranding)', () => {
   it('strips BLOCK_ID from claim-only blocks on cancel, keeps landed ones', () => {
     setupDOM(
-      '<p id="landed" data-b3rys-id="b3rys-901">Landed paragraph with translation.</p>' +
-        '<p id="claimed" data-b3rys-id="b3rys-902">Claimed but never injected paragraph.</p>',
+      '<p id="landed" data-web-translate-id="web-translate-901">Landed paragraph with translation.</p>' +
+        '<p id="claimed" data-web-translate-id="web-translate-902">Claimed but never injected paragraph.</p>',
     );
     // Give the landed block an actual translation span
     const landed = document.getElementById('landed')!;

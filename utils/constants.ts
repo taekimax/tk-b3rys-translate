@@ -50,10 +50,10 @@ export const SKIP_TAGS = new Set([
   'FOOTER',
 ]);
 export const DATA_ATTRS = {
-  TRANSLATED: 'data-b3rys-translated',
-  BLOCK_ID: 'data-b3rys-id',
-  LOADER: 'data-b3rys-loader',
-  ORIGINAL: 'data-b3rys-original',
+  TRANSLATED: 'data-web-translate-translated',
+  BLOCK_ID: 'data-web-translate-id',
+  LOADER: 'data-web-translate-loader',
+  ORIGINAL: 'data-web-translate-original',
 } as const;
 export const SUBTITLE_BATCH_SIZE = 20;
 export const SUBTITLE_LOOK_AHEAD_SEC = 120;
@@ -64,11 +64,11 @@ export const YT_SELECTORS = {
   CAPTION_VISUAL_LINE: '.caption-visual-line',
   CAPTION_WINDOW_CONTAINER: '.ytp-caption-window-container',
 } as const;
-export const YT_TRANSLATED_ATTR = 'data-b3rys-subtitle-translated';
-export const YT_TRANSLATION_CLASS = 'b3rys-subtitle-translation';
+export const YT_TRANSLATED_ATTR = 'data-web-translate-subtitle-translated';
+export const YT_TRANSLATION_CLASS = 'web-translate-subtitle-translation';
 export const CACHE_MAX_ENTRIES = 4000;
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-export const CACHE_STORAGE_KEY = 'b3rys_translation_cache';
+export const CACHE_STORAGE_KEY = 'web_translate_translation_cache';
 export type LanguageCode = 'en' | 'ko' | 'ja' | 'zh' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'ru';
 export const LANGUAGES: Record<
   LanguageCode,
@@ -87,7 +87,10 @@ export const LANGUAGES: Record<
 };
 export const DEFAULT_SOURCE_LANG: LanguageCode = 'en';
 export const DEFAULT_TARGET_LANG: LanguageCode = 'ko';
-export const LANG_STORAGE_KEY = 'b3rys_language_pair';
+export const LANG_STORAGE_KEY = 'web_translate_language_pair';
+export type UiLanguage = 'ko' | 'en';
+export const UI_LANGUAGE_STORAGE_KEY = 'web_translate_ui_language';
+export const DEFAULT_UI_LANGUAGE: UiLanguage = 'ko';
 export const SKIP_HOSTS = new Set([
   'calendar.google.com',
   'docs.google.com',

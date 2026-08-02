@@ -1,7 +1,11 @@
 import {
   getModelConfig,
+  requiresModelTermsAcceptance,
   resolveSelectedModel,
   SELECTED_MODEL_KEY,
+  TRANSLATEGEMMA_TERMS_ACCEPTED_KEY,
+  TRANSLATEGEMMA_TERMS_URL,
+  TRANSLATEGEMMA_TERMS_VERSION,
   type ModelId,
 } from '@/utils/models';
 import {
@@ -16,19 +20,40 @@ import {
   populateModelSelect,
   renderModelInfoTable,
 } from './model-ui';
-import { LANGUAGES, LANG_STORAGE_KEY, DEFAULT_TARGET_LANG } from '@/utils/constants';
+import {
+  LANGUAGES,
+  LANG_STORAGE_KEY,
+  DEFAULT_TARGET_LANG,
+  UI_LANGUAGE_STORAGE_KEY,
+} from '@/utils/constants';
+import {
+  applyUiText,
+  resolveUiLanguage,
+  saveUiLanguage,
+  setActiveUiLanguage,
+  uiText,
+  type UiTextKey,
+} from '@/utils/ui-language';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
   const status = document.getElementById('local-host-status') as HTMLSpanElement;
   const errorBanner = document.getElementById('local-error-banner') as HTMLDivElement;
   const errorMessage = document.getElementById('local-error-message') as HTMLSpanElement;
+  const standaloneInstallHelp = document.getElementById(
+    'standalone-install-help',
+  ) as HTMLDivElement;
   const badgeModel = document.querySelector('.badge-model') as HTMLSpanElement;
   const targetLang = document.getElementById('target-lang') as HTMLSelectElement;
   const fabToggle = document.getElementById('fab-toggle') as HTMLInputElement;
   const ytToggle = document.getElementById('yt-btn-toggle') as HTMLInputElement;
   const autoToggle = document.getElementById('auto-toggle') as HTMLInputElement;
   const checkModels = document.getElementById('check-models') as HTMLButtonElement;
+  const modelTermsGuide = document.getElementById('model-terms-guide') as HTMLDivElement;
+  const acceptModelTerms = document.getElementById('accept-model-terms') as HTMLInputElement;
+  const acceptModelTermsDownload = document.getElementById(
+    'accept-model-terms-download',
+  ) as HTMLButtonElement;
   const installGuide = document.getElementById('model-install-guide') as HTMLDivElement;
   const installTitle = document.getElementById('model-install-title') as HTMLElement;
   const installPath = document.getElementById('model-install-path') as HTMLElement;
@@ -43,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     'download-selected-model',
   ) as HTMLButtonElement;
   const modelPage = document.getElementById('open-model-page') as HTMLAnchorElement;
+  const uiLanguageSelect = document.getElementById('ui-language') as HTMLSelectElement;
 
   const data = await chrome.storage.local.get([
     SELECTED_MODEL_KEY,
@@ -50,15 +76,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     'ytButtonVisible',
     'autoTranslate',
     LANG_STORAGE_KEY,
+    UI_LANGUAGE_STORAGE_KEY,
     'localHostErrorMessage',
     LOCAL_MODEL_DOWNLOAD_STATE_KEY,
+    TRANSLATEGEMMA_TERMS_ACCEPTED_KEY,
   ]);
+  const uiLanguage = resolveUiLanguage(data[UI_LANGUAGE_STORAGE_KEY]);
+  setActiveUiLanguage(uiLanguage);
+  document.documentElement.lang = uiLanguage;
+  applyUiText(document);
+  uiLanguageSelect.value = uiLanguage;
+  uiLanguageSelect.addEventListener('change', async () => {
+    await saveUiLanguage(resolveUiLanguage(uiLanguageSelect.value));
+    window.location.reload();
+  });
+  const t = (key: UiTextKey, params: Record<string, string | number> = {}): string =>
+    uiText(key, uiLanguage, params);
   const selected = resolveSelectedModel(data[SELECTED_MODEL_KEY] as string | undefined);
+  let translateGemmaTermsAccepted =
+    data[TRANSLATEGEMMA_TERMS_ACCEPTED_KEY] === TRANSLATEGEMMA_TERMS_VERSION;
   populateModelSelect(modelSelect);
-  renderModelInfoTable(document.getElementById('model-tooltip') as HTMLElement);
+  renderModelInfoTable(document.getElementById('model-tooltip') as HTMLElement, uiLanguage);
   modelSelect.value = selected;
   badgeModel.textContent = getModelConfig(selected).label;
-  status.textContent = '모델 파일을 확인하고 있습니다…';
+  status.textContent = t('modelDownloadPreparing');
+  downloadPercent.textContent = t('preparing');
 
   let modelStatus: ModelStatusResponse | undefined;
   let downloadState = normalizeDownloadState(data[LOCAL_MODEL_DOWNLOAD_STATE_KEY]);
@@ -103,25 +145,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     const transferSpeed = formatTransferSpeed(active.bytesPerSecond);
     const queued = items.filter((item) => item.phase === 'queued');
     if (active.phase === 'queued') {
-      downloadTitle.textContent = `${label} 다운로드 대기 중`;
-      downloadPercent.textContent = '대기 중';
-      downloadDetail.textContent = '현재 작업이 끝나면 이 모델의 다운로드를 시작합니다.';
+      downloadTitle.textContent = t('downloadWaiting', { label });
+      downloadPercent.textContent = t('queued');
+      downloadDetail.textContent = t('downloadWaitingDetail');
     } else if (active.phase === 'preparing') {
-      downloadTitle.textContent = `${label} 다운로드 시작 중`;
-      downloadPercent.textContent = '시작 중';
-      downloadDetail.textContent = '다운로드 요청을 로컬 번역 엔진에 전달하고 있습니다.';
+      downloadTitle.textContent = t('downloadStarting', { label });
+      downloadPercent.textContent = t('starting');
+      downloadDetail.textContent = t('downloadStartingDetail');
     } else {
-      downloadTitle.textContent = `${label} 다운로드 중`;
+      downloadTitle.textContent = t('downloadProgress', { label });
       downloadPercent.textContent = `${percent}%`;
       downloadDetail.textContent = transferSpeed
-        ? `현재 대용량 파일을 받고 있습니다 · ${transferSpeed}. 진행률은 파일을 마칠 때 다음 단계로 갱신될 수 있습니다.`
-        : '현재 모델 파일을 받고 있습니다. 진행률은 파일을 마칠 때 다음 단계로 갱신될 수 있습니다.';
+        ? t('downloadTransferDetail', { speed: transferSpeed })
+        : t('downloadFileDetail');
     }
     downloadTrack.setAttribute('aria-valuenow', String(percent));
     downloadTrack.setAttribute(
       'aria-valuetext',
       active.phase === 'downloading'
-        ? `${percent}% · ${transferSpeed ? `현재 전송 속도 ${transferSpeed}` : '현재 파일 다운로드 중'}`
+        ? `${percent}% · ${transferSpeed ? t('currentTransferSpeed', { speed: transferSpeed }) : t('currentFileDownload')}`
         : (downloadPercent.textContent ?? ''),
     );
     downloadBar.style.width = active.phase === 'downloading' ? `${percent}%` : '0%';
@@ -130,11 +172,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     downloadQueue.textContent =
       queued.length === 0
         ? ''
-        : `대기열: ${queued.map((item) => getModelConfig(item.modelId).label).join(', ')}`;
+        : t('queue', {
+            models: queued.map((item) => getModelConfig(item.modelId).label).join(', '),
+          });
     downloadProgress.hidden = false;
   }
+
+  function renderModelTerms(model: ModelId): void {
+    const required = requiresModelTermsAcceptance(model);
+    modelTermsGuide.hidden = !required || translateGemmaTermsAccepted;
+    acceptModelTerms.checked = translateGemmaTermsAccepted;
+    acceptModelTermsDownload.disabled = !required || !acceptModelTerms.checked;
+  }
+
   function renderSelectedModelStatus(): void {
     const model = resolveSelectedModel(modelSelect.value);
+    renderModelTerms(model);
+    if (requiresModelTermsAcceptance(model) && !translateGemmaTermsAccepted) {
+      status.textContent = t('termsBeforeDownload');
+      installGuide.hidden = true;
+      showDownloadProgress();
+      return;
+    }
     const currentDownload = downloadFor(model);
     if (currentDownload) {
       const position = downloads().findIndex((item) => item.modelId === model) + 1;
@@ -142,68 +201,105 @@ document.addEventListener('DOMContentLoaded', async () => {
       const transferSpeed = formatTransferSpeed(currentDownload.bytesPerSecond);
       status.textContent =
         currentDownload.phase === 'queued'
-          ? `${getModelConfig(model).label} 다운로드 대기 중 · 대기열 ${position}번째`
+          ? t('queuedStatus', { label: getModelConfig(model).label, position })
           : currentDownload.phase === 'preparing'
-            ? `${getModelConfig(model).label} 다운로드 시작 중`
-            : `${getModelConfig(model).label} 다운로드 중 · ${percent}%${transferSpeed ? ` · ${transferSpeed}` : ''}`;
+            ? t('downloadStarting', { label: getModelConfig(model).label })
+            : `${t('downloadProgress', { label: getModelConfig(model).label })} · ${percent}%${transferSpeed ? ` · ${transferSpeed}` : ''}`;
       installGuide.hidden = true;
       showDownloadProgress();
       return;
     }
     if (requestedDownloads.has(model)) {
-      status.textContent = `${getModelConfig(model).label} 다운로드 요청을 보내는 중입니다.`;
+      status.textContent = t('requestedStatus', { label: getModelConfig(model).label });
       installGuide.hidden = true;
       showDownloadProgress();
       return;
     }
     showDownloadProgress();
     if (!modelStatus) {
-      status.textContent = '로컬 번역 엔진에 연결할 수 없습니다.';
+      status.textContent = t('engineUnavailable');
       installGuide.hidden = true;
+      standaloneInstallHelp.hidden = false;
       return;
     }
+    standaloneInstallHelp.hidden = true;
     const current = findModelStatus(modelStatus.models, model);
     if (!current) {
-      status.textContent = '모델 상태를 확인할 수 없습니다.';
+      status.textContent = t('modelStatusUnavailable');
       installGuide.hidden = true;
       return;
     }
     if (current.ready) {
-      status.textContent = `준비됨 · ${getModelConfig(model).label}`;
+      status.textContent = t('ready', { label: getModelConfig(model).label });
       installGuide.hidden = true;
       return;
     }
     const modelName = getModelConfig(model).label;
-    status.textContent = `${modelName} 모델을 다운로드해야 합니다.`;
-    installTitle.textContent = `${modelName} 모델을 다운로드할까요?`;
-    installPath.textContent =
-      '아직 이 Mac에 저장되지 않았습니다. 다운로드가 완료되면 이 모델로 번역할 수 있습니다.';
-    downloadSelectedModel.textContent = `${modelName} 다운로드 시작`;
+    status.textContent = t('modelNeedsDownload', { label: modelName });
+    installTitle.textContent = t('modelDownloadQuestionWithLabel', { label: modelName });
+    installPath.textContent = t('modelNotStored');
+    downloadSelectedModel.textContent = t('downloadModel', { label: modelName });
     downloadSelectedModel.disabled = false;
     modelPage.href = modelDownloadUrl(model);
     installGuide.hidden = false;
   }
 
+  async function startSelectedModelDownload(model: ModelId): Promise<void> {
+    if (requiresModelTermsAcceptance(model) && !translateGemmaTermsAccepted) {
+      renderSelectedModelStatus();
+      return;
+    }
+    const current = modelStatus && findModelStatus(modelStatus.models, model);
+    if (current?.ready || downloadFor(model) || requestedDownloads.has(model)) return;
+
+    requestedDownloads.add(model);
+    downloadSelectedModel.disabled = true;
+    renderSelectedModelStatus();
+    try {
+      const result = (await chrome.runtime.sendMessage({
+        type: 'DOWNLOAD_MODEL',
+        modelId: model,
+      })) as
+        | (ModelStatusResponse & { success: true })
+        | { success: false; error?: string; errorCode?: string };
+      if (!result?.success) {
+        if (result?.errorCode === 'terms_required') translateGemmaTermsAccepted = false;
+        throw new Error(result?.error || t('downloadStartFailed'));
+      }
+      modelStatus = result;
+    } catch {
+      if (requiresModelTermsAcceptance(model) && !translateGemmaTermsAccepted) {
+        status.textContent = t('termsDownloadAvailable');
+      } else {
+        errorMessage.textContent = t('downloadInterrupted');
+        errorBanner.style.display = 'flex';
+      }
+    } finally {
+      requestedDownloads.delete(model);
+      renderSelectedModelStatus();
+      void refreshModelStatus();
+    }
+  }
+
   async function refreshModelStatus(): Promise<void> {
     checkModels.disabled = true;
     if (!downloadFor(resolveSelectedModel(modelSelect.value))) {
-      status.textContent = '모델 파일을 확인하고 있습니다…';
+      status.textContent = t('modelDownloadPreparing');
     }
     try {
       const result = (await chrome.runtime.sendMessage({ type: 'GET_MODEL_STATUS' })) as
         | (ModelStatusResponse & { success: true })
         | { success: false; error?: string };
-      if (!result?.success)
-        throw new Error(result?.error || '로컬 번역 엔진에 연결할 수 없습니다.');
+      if (!result?.success) throw new Error(result?.error || t('engineUnavailable'));
       modelStatus = result;
       renderSelectedModelStatus();
     } catch {
       modelStatus = undefined;
-      status.textContent = '로컬 번역 엔진에 연결할 수 없습니다.';
-      errorMessage.textContent =
-        '모델 상태를 확인할 수 없습니다. 확장 프로그램을 새로고침한 뒤 다시 시도해 주세요.';
+      status.textContent = t('engineUnavailable');
+      errorMessage.textContent = t('statusRefreshFailed');
       errorBanner.style.display = 'flex';
       installGuide.hidden = true;
+      standaloneInstallHelp.hidden = false;
     } finally {
       checkModels.disabled = false;
     }
@@ -223,27 +319,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     downloadState = normalizeDownloadState(nextState);
     renderSelectedModelStatus();
   });
-  downloadSelectedModel.addEventListener('click', async () => {
+  downloadSelectedModel.addEventListener('click', () => {
     const model = resolveSelectedModel(modelSelect.value);
-    requestedDownloads.add(model);
-    downloadSelectedModel.disabled = true;
-    renderSelectedModelStatus();
-    try {
-      const result = (await chrome.runtime.sendMessage({
-        type: 'DOWNLOAD_MODEL',
-        modelId: model,
-      })) as (ModelStatusResponse & { success: true }) | { success: false; error?: string };
-      if (!result?.success) throw new Error(result?.error || '모델 다운로드를 시작할 수 없습니다.');
-      modelStatus = result;
-    } catch {
-      errorMessage.textContent =
-        '모델 다운로드가 중단되었습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
-      errorBanner.style.display = 'flex';
-    } finally {
-      requestedDownloads.delete(model);
-      renderSelectedModelStatus();
-      void refreshModelStatus();
-    }
+    void startSelectedModelDownload(model);
   });
   renderSelectedModelStatus();
   void refreshModelStatus();
@@ -251,6 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (data.localHostErrorMessage) {
     errorMessage.textContent = data.localHostErrorMessage as string;
     errorBanner.style.display = 'flex';
+    standaloneInstallHelp.hidden = false;
     await chrome.storage.local.remove('localHostErrorMessage');
   }
   document.getElementById('dismiss-error')?.addEventListener('click', () => {
@@ -262,7 +341,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     await chrome.storage.local.set({ [SELECTED_MODEL_KEY]: model });
     badgeModel.textContent = getModelConfig(model).label;
     renderSelectedModelStatus();
-    void refreshModelStatus();
+    await refreshModelStatus();
+  });
+
+  document.getElementById('open-model-terms')?.setAttribute('href', TRANSLATEGEMMA_TERMS_URL);
+  acceptModelTerms.addEventListener('change', () => {
+    acceptModelTermsDownload.disabled = !acceptModelTerms.checked;
+  });
+  acceptModelTermsDownload.addEventListener('click', async () => {
+    if (!acceptModelTerms.checked) return;
+    translateGemmaTermsAccepted = true;
+    await chrome.storage.local.set({
+      [TRANSLATEGEMMA_TERMS_ACCEPTED_KEY]: TRANSLATEGEMMA_TERMS_VERSION,
+    });
+    const model = resolveSelectedModel(modelSelect.value) as ModelId;
+    renderSelectedModelStatus();
+    await refreshModelStatus();
+    void startSelectedModelDownload(model);
   });
 
   for (const [code, info] of Object.entries(LANGUAGES)) {
@@ -301,8 +396,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const clear = document.getElementById('cache-clear') as HTMLButtonElement;
   clear.addEventListener('click', async () => {
     const result = await chrome.runtime.sendMessage({ type: 'CLEAR_CACHE' });
-    status.textContent = result?.success
-      ? '번역 캐시를 지웠습니다.'
-      : '번역 캐시를 지우지 못했습니다.';
+    status.textContent = result?.success ? t('cacheCleared') : t('cacheClearFailed');
   });
 });
